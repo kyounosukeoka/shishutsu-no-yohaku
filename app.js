@@ -147,7 +147,46 @@ function lineChart(recs){const [year,month]=viewMonth.split('-').map(Number),day
 /* 定期支出は「支払予定日になってから」生成。再起動しても重複しない。 */
 function recurringOccurrence(start,index,frequency){const [y,m,d]=start.split('-').map(Number);if(frequency==='weekly')return addDays(start,index*7);if(frequency==='monthly'){const target=new Date(Date.UTC(y,m-1+index,1)),year=target.getUTCFullYear(),month=target.getUTCMonth()+1,last=new Date(Date.UTC(year,month,0)).getUTCDate();return `${year}-${pad(month)}-${pad(Math.min(d,last))}`;}if(frequency==='yearly'){const year=y+index,last=new Date(Date.UTC(year,m,0)).getUTCDate();return `${year}-${pad(m)}-${pad(Math.min(d,last))}`;}return null;}
 function generateRecurring(){let generated=0;const now=today();for(const rule of state.recurrings){let nextIndex=Number.isSafeInteger(rule.nextIndex)?rule.nextIndex:0;for(let safety=0;safety<1200;safety++){const due=recurringOccurrence(rule.startDate,nextIndex,rule.frequency);if(!due||due>now)break;const occurrenceKey=rule.id+'|'+due;const exists=state.records.some(r=>r.recurringId===rule.id&&r.scheduledDate===due);if(!exists&&!state.skippedOccurrences.includes(occurrenceKey)){state.records.push({id:safeId(),date:due,category:rule.category,amount:rule.amount,memo:rule.name,planned:rule.planned,rating:rule.rating,createdAt:new Date().toISOString(),recurringId:rule.id,scheduledDate:due});generated++;}nextIndex++;}rule.nextIndex=nextIndex;}return generated;}
-function renderSettings(){const settings=$('#budgetSettings');settings.innerHTML=state.categories.map(c=>`<label class="budget-setting-row"><span class="budget-cat"><span>${escapeHTML(c.icon)}</span>${escapeHTML(c.name)}</span><input type="number" inputmode="numeric" min="0" max="999999999" step="1" data-budget="${escapeHTML(c.id)}" value="${Number(state.budgets[c.id]||0)||''}" placeholder="未設定" aria-label="${escapeHTML(c.name)}の月間予算"></label>`).join('');$('#customCategories').innerHTML=state.categories.filter(c=>c.custom).map(c=>`<span class="custom-category"><span class="custom-category-icon">${escapeHTML(c.icon)}</span>${escapeHTML(c.name)}<button type="button" data-remove-category="${escapeHTML(c.id)}" aria-label="${escapeHTML(c.name)}を削除">×</button></span>`).join('');const freqs={weekly:'毎週',monthly:'毎月',yearly:'毎年'};$('#recurringList').innerHTML=state.recurrings.length?state.recurrings.map(r=>`<div class="recurring-list-item"><span class="record-emoji">${escapeHTML(categoryById(r.category).icon)}</span><div class="recurring-info"><strong>${escapeHTML(r.name)} ・ ${yen(r.amount)}</strong><small>${freqs[r.frequency]||''} ／ 初回 ${escapeHTML(displayDate(r.startDate))} ／ ${r.planned==='unexpected'?'予定外':'予定あり'}</small></div><button class="mini-delete" type="button" data-delete-recurring="${escapeHTML(r.id)}">削除</button></div>`).join(''):'<div class="empty-state">定期支出はまだ登録されていません。</div>';$('#recurringCategory').innerHTML=state.categories.map(c=>`<option value="${escapeHTML(c.id)}">${escapeHTML(c.icon)} ${escapeHTML(c.name)}</option>`).join('');renderBudgetSummary();renderEmojiPicker();renderNewCategoryPreview();}
+function renderSettings(){const settings=$('#budgetSettings');settings.innerHTML=state.categories.map(c=>`<label class="budget-setting-row"><span class="budget-cat"><span>${escapeHTML(c.icon)}</span>${escapeHTML(c.name)}</span><input type="number" inputmode="numeric" min="0" max="999999999" step="1" data-budget="${escapeHTML(c.id)}" value="${Number(state.budgets[c.id]||0)||''}" placeholder="未設定" aria-label="${escapeHTML(c.name)}の月間予算"></label>`).join('');$('#customCategories').innerHTML=state.categories.filter(c=>c.custom).map(c=>`<span class="custom-category"><span class="custom-category-icon">${escapeHTML(c.icon)}</span>${escapeHTML(c.name)}<button type="button" data-remove-category="${escapeHTML(c.id)}" aria-label="${escapeHTML(c.name)}を削除">×</button></span>`).join('');const freqs={weekly:'毎週',monthly:'毎月',yearly:'毎年'};$('#recurringList').innerHTML=state.recurrings.length?state.recurrings.map(r=>`<div class="recurring-list-item"><span class="record-emoji">${escapeHTML(categoryById(r.category).icon)}</span><div class="recurring-info"><strong>${escapeHTML(r.name)} ・ ${yen(r.amount)}</strong><small>${freqs[r.frequency]||''} ／ 初回 ${escapeHTML(displayDate(r.startDate))} ／ ${r.planned==='unexpected'?'予定外':'予定あり'}</small></div><button class="mini-delete" type="button" data-delete-recurring="${escapeHTML(r.id)}">削除</button></div>`).join(''):'<div class="empty-state">定期支出はまだ登録されていません。</div>';$('#recurringCategory').innerHTML=state.categories.map(c=>`<option value="${escapeHTML(c.id)}">${escapeHTML(c.icon)} ${escapeHTML(c.name)}</option>`).join('');renderBudgetSummary();renderEmojiPicker();renderNewCategoryPreview();renderCategoryOrderSettings();}
+
+/* カテゴリー順の編集：1行につき4つの選択欄。別の場所を選んだら入れ替える。 */
+function renderCategoryOrderSettings(){
+  const holder=$('#categoryOrderSettings');
+  const categories=state.categories;
+  const rows=[];
+  for(let start=0;start<categories.length;start+=4){
+    const slots=categories.slice(start,start+4).map((cat,offset)=>{
+      const index=start+offset;
+      const options=categories.map(candidate=>`<option value="${escapeHTML(candidate.id)}" ${candidate.id===cat.id?'selected':''}>${escapeHTML(candidate.icon)} ${escapeHTML(candidate.name)}</option>`).join('');
+      return `<label class="category-order-cell"><span class="category-order-slot">左から${offset+1}番目</span><select data-category-slot="${index}" aria-label="${Math.floor(start/4)+1}行目の左から${offset+1}番目">${options}</select></label>`;
+    }).join('');
+    rows.push(`<div class="category-order-row"><div class="category-order-row-head"><strong>${Math.floor(start/4)+1}行目</strong><span>カテゴリー ${start+1}〜${Math.min(start+4,categories.length)}</span></div><div class="category-order-cells">${slots}</div></div>`);
+  }
+  holder.innerHTML=rows.join('');
+}
+$('#categoryOrderSettings').addEventListener('change',(event)=>{
+  const select=event.target.closest('[data-category-slot]');
+  if(!select)return;
+  const from=Number(select.dataset.categorySlot);
+  const to=state.categories.findIndex(category=>category.id===select.value);
+  if(!Number.isInteger(from)||from<0||from>=state.categories.length||to<0){renderCategoryOrderSettings();return;}
+  if(from===to)return;
+  // 順番のみ変更する。支出や予算はカテゴリーIDで紐づくので維持される。
+  [state.categories[from],state.categories[to]]=[state.categories[to],state.categories[from]];
+  queueSave();
+  renderCategoryOrderSettings();
+  renderCategories();
+  // 予算入力の未保存値を消さずにカテゴリー順だけを合わせる。
+  const budgetHolder=$('#budgetSettings');
+  const budgetRows=new Map($$('[data-budget]').map(input=>[input.dataset.budget,input.closest('.budget-setting-row')]));
+  for(const category of state.categories){const row=budgetRows.get(category.id);if(row)budgetHolder.appendChild(row);}
+  // 定期支出のカテゴリー選択肢も最新の順序に（現在の選択は維持）。
+  const recurring=$('#recurringCategory'),previous=recurring.value;
+  recurring.innerHTML=state.categories.map(category=>`<option value="${escapeHTML(category.id)}">${escapeHTML(category.icon)} ${escapeHTML(category.name)}</option>`).join('');
+  if(state.categories.some(category=>category.id===previous))recurring.value=previous;
+  $('#customCategories').innerHTML=state.categories.filter(category=>category.custom).map(category=>`<span class="custom-category"><span class="custom-category-icon">${escapeHTML(category.icon)}</span>${escapeHTML(category.name)}<button type="button" data-remove-category="${escapeHTML(category.id)}" aria-label="${escapeHTML(category.name)}を削除">×</button></span>`).join('');
+  toast('カテゴリーの表示順を変更しました。');
+});
 
 /* 保存前の入力値も含め、当月の月間予算合計を即座に更新 */
 function renderBudgetSummary(){

@@ -42,3 +42,32 @@
 .budget-setting-row{min-width:0}
 .budget-setting-row input{width:0;flex:1 1 0;min-width:0}
 @media(max-width:850px){.budget-settings{grid-template-columns:minmax(0,1fr)}}
+
+/* v4: keep the mobile navigation flush with the physical viewport bottom. */
+html,body{max-width:100%;overflow-x:clip;overscroll-behavior-x:none}
+button,.tab,.calc-key,.category-choice,.rating-btn,.segment{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+@media(max-width:640px){
+ .tab-nav{bottom:0!important;left:0;right:0;width:100%;max-width:none;margin:0!important;padding:5px 5px calc(7px + env(safe-area-inset-bottom,0px));box-sizing:border-box;border-radius:0;touch-action:manipulation}
+ .main-content{padding-bottom:calc(94px + env(safe-area-inset-bottom,0px))}
+ .calc-key{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+}
+
+
+/* v5: Category row/position organizer. Actual record grid is four columns. */
+.category-sort-section{min-width:0}
+.category-sort-note{font-size:12px;color:var(--muted);background:#f1f6f0;border:1px solid #e0e8df;border-radius:11px;padding:11px 12px;margin:12px 0 15px;line-height:1.65}
+.category-order-settings{display:grid;gap:12px;min-width:0}
+.category-order-row{border:1px solid var(--border);border-radius:13px;padding:13px;background:#fafcf9;min-width:0}
+.category-order-row-head{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.category-order-row-head strong{font-size:13px;color:var(--green)}
+.category-order-row-head span{font-size:11px;color:var(--muted)}
+.category-order-cells{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.category-order-cell{display:grid;gap:6px;min-width:0}
+.category-order-slot{font-size:11px;color:var(--muted);font-weight:700}
+.category-order-cell select{width:100%;min-width:0;height:43px;padding:7px 24px 7px 9px;border:1px solid #d7e2d7;border-radius:9px;background-color:white;color:var(--ink);font-size:12px;font-weight:650;touch-action:manipulation;box-sizing:border-box}
+.category-order-cell select:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+@media(max-width:640px){
+  .category-order-row{padding:12px 9px}
+  .category-order-cells{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .category-order-cell select{font-size:12px;height:45px}
+}

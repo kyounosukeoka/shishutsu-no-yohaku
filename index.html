@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#183d39">
   <meta name="description" content="支出を記録して、暮らしに余白を。予算・カレンダー・グラフ・5段階評価で、お金の使い方を見直すプライベートな家計簿。">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -115,6 +115,14 @@
               <p id="budgetSummaryNote" class="budget-summary-note"></p>
             </div>
             <div id="budgetSettings" class="budget-settings"></div><button id="saveBudgets" type="button" class="btn btn-primary">予算を保存</button></section>
+          <section class="card padded category-sort-section" aria-labelledby="categorySortTitle">
+            <div class="section-title-row"><div>
+              <h3 id="categorySortTitle">カテゴリーの表示順</h3>
+              <p class="muted tiny">支出の登録画面は左から4つずつ並びます。1行目・2行目…の各場所に表示するカテゴリーを選んでください。</p>
+            </div></div>
+            <p class="category-sort-note">別の場所にあるカテゴリーを選ぶと、2つの位置が入れ替わります。順番は自動保存されます。</p>
+            <div id="categoryOrderSettings" class="category-order-settings" aria-label="カテゴリーの表示順を変更"></div>
+          </section>
           <section class="card padded"><div class="section-title-row"><div><h3>定期的な支出</h3><p class="muted tiny">家賃やサブスクなど。支払日になり、アプリを開いたときに自動記録します。</p></div><button id="openRecurring" type="button" class="btn btn-secondary">＋ 定期支出を追加</button></div><div id="recurringList"></div></section>
           <section class="card padded"><h3>カテゴリーの追加</h3><p class="muted tiny">用意された絵文字から、お好みのアイコンを選べます。</p>
             <div class="category-creator"><div class="category-new-preview"><span id="newCategoryPreviewIcon" class="category-preview-emoji" aria-hidden="true">📦</span><div><strong id="newCategoryPreviewName">新しいカテゴリー</strong><small>登録するカテゴリーのイメージ</small></div></div><label class="field-label" for="newCategoryName">カテゴリー名</label><input id="newCategoryName" type="text" maxlength="12" placeholder="例：ペット・書籍" aria-label="新しいカテゴリー名">
