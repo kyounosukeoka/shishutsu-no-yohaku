@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
   <title>支出の余白｜暮らしを見直す支出記録</title>
 </head>
 <body>
@@ -107,14 +107,14 @@
       <section id="page-settings" class="page" aria-label="設定">
         <div class="page-heading"><div><span class="eyebrow">YOUR PREFERENCES</span><h2>設定と定期支出</h2><p class="muted">自分の暮らしに合わせて、使いやすく。</p></div></div>
         <div class="settings-stack">
-          <section class="card padded"><div class="section-title-row"><div><h3>カテゴリーごとの月間予算</h3><p class="muted tiny">カテゴリー別の予算を合計して、今月の月間予算を表示します。空欄または0円は未設定です。</p></div></div>
+          <section class="card padded"><div class="section-title-row"><div><h3>カテゴリーごとの月間予算</h3><p class="muted tiny">カテゴリー別の予算とグラフの色を設定できます。色は右端のパレットから選択します。空欄または0円は予算未設定です。</p></div></div>
             <div id="budgetSummary" class="budget-summary" aria-live="polite">
               <div class="budget-summary-main"><span>月間予算の合計</span><strong id="budgetTotalValue">¥0</strong></div>
               <div class="budget-summary-stats"><div><span>予算対象の支出（今月）</span><strong id="budgetSpentValue">¥0</strong></div><div><span>残り予算</span><strong id="budgetRemainingValue">¥0</strong></div></div>
               <div class="budget-summary-track" aria-hidden="true"><div id="budgetSummaryFill"></div></div>
               <p id="budgetSummaryNote" class="budget-summary-note"></p>
             </div>
-            <p class="budget-scroll-label" id="budgetScrollLabel">カテゴリーを6項目ずつ表示します。枠内をスクロールして確認できます。</p><div id="budgetSettings" class="budget-settings" tabindex="0" aria-label="カテゴリー別の月間予算。6項目ずつ表示、枠内スクロール可能" aria-describedby="budgetScrollLabel"></div><button id="saveBudgets" type="button" class="btn btn-primary">予算を保存</button></section>
+            <p class="budget-scroll-label" id="budgetScrollLabel">カテゴリーを6項目ずつ表示します。7件目以降は枠内でスクロールできます。</p><div id="budgetSettings" class="budget-settings" tabindex="0" aria-label="カテゴリー別の月間予算。6項目ずつ表示、枠内スクロール可能" aria-describedby="budgetScrollLabel"></div><button id="saveBudgets" type="button" class="btn btn-primary">予算を保存</button></section>
           <section class="card padded category-sort-section" aria-labelledby="categorySortTitle">
             <div class="section-title-row"><div>
               <h3 id="categorySortTitle">カテゴリーの表示順</h3>
@@ -124,7 +124,7 @@
             <div id="categoryOrderSettings" class="category-order-settings" aria-label="カテゴリーの表示順を変更"></div>
           </section>
           <section class="card padded"><div class="section-title-row"><div><h3>定期的な支出</h3><p class="muted tiny">家賃やサブスクなど。支払日になり、アプリを開いたときに自動記録します。</p></div><button id="openRecurring" type="button" class="btn btn-secondary">＋ 定期支出を追加</button></div><div id="recurringList"></div></section>
-          <section class="card padded"><h3>カテゴリーの追加</h3><p class="muted tiny">用意された絵文字から、お好みのアイコンを選べます。</p>
+          <section class="card padded"><h3>カテゴリーの追加・削除</h3><p class="muted tiny">絵文字からアイコンを選べます。追加したカテゴリーを削除すると、過去の支出と定期支出は「その他」へ移されます。</p>
             <div class="category-creator"><div class="category-new-preview"><span id="newCategoryPreviewIcon" class="category-preview-emoji" aria-hidden="true">📦</span><div><strong id="newCategoryPreviewName">新しいカテゴリー</strong><small>登録するカテゴリーのイメージ</small></div></div><label class="field-label" for="newCategoryName">カテゴリー名</label><input id="newCategoryName" type="text" maxlength="12" placeholder="例：ペット・書籍" aria-label="新しいカテゴリー名">
               <div class="emoji-picker-heading"><span class="field-label">アイコンを選択</span><span id="emojiCount" class="muted tiny"></span></div>
               <div id="emojiGroups" class="emoji-groups" role="group" aria-label="絵文字の種類"></div>
@@ -133,7 +133,7 @@
             </div><div id="customCategories" class="custom-categories"></div></section>
           <section class="card padded"><h3>データの書き出し・復元</h3><p class="muted settings-desc">CSVは表計算ソフトで見られる形式です。暗号化バックアップは、別の端末にデータを移す際にも使えます。</p><div class="settings-buttons"><button id="exportCsv" type="button" class="btn btn-secondary">↓ CSVを書き出す</button><button id="exportBackup" type="button" class="btn btn-outline">↓ 暗号化バックアップ</button><button id="importBackup" type="button" class="btn btn-outline">↑ バックアップを復元</button><input id="backupFile" type="file" accept="application/json,.json" hidden></div><p class="alert-text tiny">※ CSVには暗号化がかかりません。共有・保存先にご注意ください。ブラウザのデータを消すと記録も失われます。</p></section>
           <section class="card padded"><h3>パスワードの変更</h3><p class="muted settings-desc">新しい数字パスワード（4桁以上）で記録を再暗号化します。推測されにくい6〜8桁以上を推奨します。</p><div class="password-change"><input id="newPassword" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワード"><input id="newPasswordConfirm" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワードをもう一度"><button id="changePassword" type="button" class="btn btn-outline">パスワードを変更</button></div></section>
-          <div class="settings-footer">支出の余白 <span>・</span> 記録はこの端末だけに保存され、外部サーバーへ送信しません。</div>
+          <div class="settings-footer"><span id="appVersion" class="settings-version">支出の余白　Ver.7.0.0</span><span>記録はこの端末だけに暗号化保存され、外部サーバーへ送信しません。</span></div>
         </div>
       </section>
     </main>
@@ -153,7 +153,19 @@
       <div id="categoryOrderOptions" class="category-order-options" role="group" aria-label="表示したいカテゴリーを選ぶ"></div>
     </div>
   </div>
+  <div id="colorPaletteModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="colorPaletteTitle">
+    <div class="modal-backdrop" data-close="colorPalette"></div>
+    <div class="color-palette-dialog">
+      <div class="modal-top"><h3 id="colorPaletteTitle">グラフの色を設定</h3><button type="button" class="close-btn" data-close="colorPalette" aria-label="閉じる">×</button></div>
+      <p id="colorPaletteCategory" class="color-palette-cat"></p>
+      <p class="muted tiny">パレットの色をタップするか、お好みの色を作成してください。</p>
+      <div id="colorPaletteChoices" class="color-palette-choices" role="group" aria-label="おすすめの色"></div>
+      <label class="color-custom-row" for="categoryColorNative"><span>好きな色を選ぶ</span><input type="color" id="categoryColorNative" value="#939c9b" aria-label="自由な色を選ぶ"></label>
+      <div class="color-selected-preview"><span id="categoryColorPreview" class="color-preview-block"></span><span>選択中：<strong id="colorHexValue">#939C9B</strong></span></div>
+      <button id="applyCategoryColor" type="button" class="btn btn-primary btn-full">この色を保存する</button>
+    </div>
+  </div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <script src="app.js?v=6" defer></script>
+  <script src="app.js?v=7" defer></script>
 </body>
 </html>
