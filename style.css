@@ -155,3 +155,10 @@ button,.tab,.calc-key,.category-choice,.rating-btn,.segment{touch-action:manipul
 .settings-version{font-size:13px;color:var(--green);font-weight:800;letter-spacing:.06em}
 @media(max-width:640px){.budget-setting-row{gap:5px}.budget-setting-row input[data-budget]{width:91px;max-width:35%;padding:8px 5px;font-size:12px}.color-palette-launch{width:42px;flex-basis:42px}.color-palette-dialog{padding:19px}.color-palette-choices{gap:8px}}
 @media(max-width:360px){.budget-setting-row .budget-cat{gap:3px}.budget-setting-row input[data-budget]{width:77px}.color-palette-launch{width:38px;flex-basis:38px}.color-palette-choices{gap:6px}}
+
+/* v8: 起動時ログイン設定 */
+.login-preference-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 14px;border:1px solid var(--line,#d8d9d3);border-radius:12px;cursor:pointer;margin:12px 0;}
+.login-preference-row span{display:flex;flex-direction:column;gap:5px;min-width:0;}
+.login-preference-row strong{font-size:14px;}
+.login-preference-row small{font-size:12px;line-height:1.5;opacity:.75;}
+.login-preference-row input{flex:none;width:24px;height:24px;accent-color:#2e695c;cursor:pointer;}

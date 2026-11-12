@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
   <title>支出の余白｜暮らしを見直す支出記録</title>
 </head>
 <body>
@@ -132,8 +132,17 @@
               <button id="addCategory" type="button" class="btn btn-secondary category-add-btn">＋ カテゴリーを追加</button>
             </div><div id="customCategories" class="custom-categories"></div></section>
           <section class="card padded"><h3>データの書き出し・復元</h3><p class="muted settings-desc">CSVは表計算ソフトで見られる形式です。暗号化バックアップは、別の端末にデータを移す際にも使えます。</p><div class="settings-buttons"><button id="exportCsv" type="button" class="btn btn-secondary">↓ CSVを書き出す</button><button id="exportBackup" type="button" class="btn btn-outline">↓ 暗号化バックアップ</button><button id="importBackup" type="button" class="btn btn-outline">↑ バックアップを復元</button><input id="backupFile" type="file" accept="application/json,.json" hidden></div><p class="alert-text tiny">※ CSVには暗号化がかかりません。共有・保存先にご注意ください。ブラウザのデータを消すと記録も失われます。</p></section>
+          <section class="card padded" aria-labelledby="loginPreferenceHeading">
+            <h3 id="loginPreferenceHeading">起動時のログイン</h3>
+            <p class="muted settings-desc">この端末でアプリを開く際、数字パスワードを入力するか選択できます。初期設定はログインありです。</p>
+            <label class="login-preference-row" for="loginOnLaunch">
+              <span><strong>起動時にパスワードを求める</strong><small id="loginPreferenceStatus">起動時に数字パスワードを入力します。</small></span>
+              <input id="loginOnLaunch" type="checkbox" checked aria-describedby="loginSecurityNote">
+            </label>
+            <p class="alert-text tiny" id="loginSecurityNote">オフにすると、同じブラウザを使う人も記録を閲覧できます。記録の暗号化は維持されますが、復号鍵を端末内に保存します。共有端末ではオンを推奨します。</p>
+          </section>
           <section class="card padded"><h3>パスワードの変更</h3><p class="muted settings-desc">新しい数字パスワード（4桁以上）で記録を再暗号化します。推測されにくい6〜8桁以上を推奨します。</p><div class="password-change"><input id="newPassword" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワード"><input id="newPasswordConfirm" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワードをもう一度"><button id="changePassword" type="button" class="btn btn-outline">パスワードを変更</button></div></section>
-          <div class="settings-footer"><span id="appVersion" class="settings-version">支出の余白　Ver.7.0.0</span><span>記録はこの端末だけに暗号化保存され、外部サーバーへ送信しません。</span></div>
+          <div class="settings-footer"><span id="appVersion" class="settings-version">支出の余白　Ver.8.0.0</span><span>記録はこの端末だけに暗号化保存され、外部サーバーへ送信しません。</span></div>
         </div>
       </section>
     </main>
@@ -166,6 +175,6 @@
     </div>
   </div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <script src="app.js?v=7" defer></script>
+  <script src="app.js?v=8" defer></script>
 </body>
 </html>

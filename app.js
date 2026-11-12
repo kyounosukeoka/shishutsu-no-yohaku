@@ -19,7 +19,9 @@ const CATEGORIES=[
 const EXTRA_COLORS=['#8aa7b8','#b39ebd','#d4a381','#8fb69e','#bfa774','#c79eaa','#97a8c3','#b7b68d'];
 const COLOR_PALETTE=['#72a58c','#2e695c','#a2bf94','#8c9bbe','#4c80a7','#94b1bb','#9e98c1','#7665a7','#c78ea4','#d76883','#b74847','#ca946e','#d1b35c','#c6a051','#a9987b','#b5a17c','#939c9b','#4d6868','#343e4b','#8fb69e','#f3b59b','#ddabcf','#b7b68d','#e2cdb1'];
 const normalizeColor=(color)=>/^#[0-9a-f]{6}$/i.test(String(color||''))?String(color).toLowerCase():'#939c9b';
-const APP_VERSION='7.0.0';
+const APP_VERSION='8.0.0';
+const AUTO_UNLOCK_FLAG='shishutsu-no-yohaku-auto-unlock-v1';
+const KEY_DB='shishutsu-no-yohaku-device-key-v1';
 /* カテゴリー登録用：端末に標準搭載された絵文字から選択 */
 const EMOJI_GROUPS=[
   {id:'food',name:'食べ物',emojis:'🍚 🍙 🍞 🥐 🥯 🍜 🍝 🍲 🍛 🍣 🍱 🍕 🍔 🍟 🥪 🥗 🥬 🥕 🥦 🍅 🥑 🍎 🍊 🍋 🍓 🍇 🍌 🧀 🥩 🍗 🐟 🦀 🥚 🥛 ☕ 🍵 🍰 🍪 🍫 🍺 🧋'},
@@ -74,9 +76,83 @@ async function encryptState(){const iv=crypto.getRandomValues(new Uint8Array(12)
 async function persistState(){if(!sessionKey)throw new Error('ロック中のため保存できません。');localStorage.setItem(STORAGE_KEY,await encryptState());}
 function queueSave(){saveQueue=saveQueue.catch(()=>{}).then(persistState);saveQueue.catch(()=>toast('保存に失敗しました。端末の空き容量をご確認ください。',true));}
 async function decryptSaved(password){const e=JSON.parse(localStorage.getItem(STORAGE_KEY));if(!e||e.version!==1||typeof e.salt!=='string'||typeof e.iv!=='string'||typeof e.data!=='string')throw new Error('保存形式が正しくありません。');const key=await deriveKey(password,e.salt);const bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode64(e.iv)},key,decode64(e.data));const loaded=JSON.parse(new TextDecoder().decode(bytes));if(!loaded||!Array.isArray(loaded.records)||!Array.isArray(loaded.categories)||!Array.isArray(loaded.recurrings))throw new Error('記録の形式が正しくありません。');return {loaded,key,salt:e.salt};}
+/* ログイン省略時は、復号鍵をこの端末のIndexedDBに保持する。
+   パスワードや平文データをlocalStorageに保存しない。 */
+function deviceKeyStore(action,key){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in globalThis)){reject(new Error('このブラウザでは端末内の鍵保存を利用できません。'));return;}
+    const request=indexedDB.open(KEY_DB,1);
+    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('keys'))request.result.createObjectStore('keys');};
+    request.onerror=()=>reject(request.error||new Error('端末鍵ストアにアクセスできません。'));
+    request.onsuccess=()=>{
+      const db=request.result;
+      try{
+        const tx=db.transaction('keys',action==='get'?'readonly':'readwrite');
+        const store=tx.objectStore('keys');
+        const req=action==='get'?store.get('current'):action==='put'?store.put(key,'current'):store.delete('current');
+        let result=null;
+        req.onsuccess=()=>{result=req.result;};
+        tx.oncomplete=()=>{db.close();resolve(result);};
+        tx.onerror=()=>{db.close();reject(tx.error||new Error('端末鍵を保存できません。'));};
+        tx.onabort=()=>{db.close();reject(tx.error||new Error('端末鍵の保存が中断されました。'));};
+      }catch(err){db.close();reject(err);}
+    };
+  });
+}
+function autoUnlockEnabled(){return localStorage.getItem(AUTO_UNLOCK_FLAG)==='1';}
+function renderLoginPreference(){
+  const toggle=$('#loginOnLaunch');if(!toggle)return;
+  toggle.checked=!autoUnlockEnabled();
+  $('#loginPreferenceStatus').textContent=toggle.checked?'起動時に数字パスワードを入力します。':'次回からこの端末ではパスワードなしで開きます。';
+}
+async function setLoginRequired(required){
+  if(required){
+    // 先に設定を無効化しておき、鍵の削除が失敗しても自動解除を行わない。
+    localStorage.removeItem(AUTO_UNLOCK_FLAG);
+    await deviceKeyStore('delete');
+  }else{
+    if(!sessionKey)throw new Error('ログイン後に設定してください。');
+    await saveQueue;
+    await deviceKeyStore('put',sessionKey);
+    localStorage.setItem(AUTO_UNLOCK_FLAG,'1');
+  }
+  renderLoginPreference();
+}
+async function attemptAutoUnlock(){
+  if(!autoUnlockEnabled()||!localStorage.getItem(STORAGE_KEY))return;
+  const button=$('#authSubmit');button.disabled=true;
+  $('#authDescription').textContent='端末内の記録を開いています…';
+  try{
+    const key=await deviceKeyStore('get');
+    if(!key)throw new Error('端末鍵が見つかりません。');
+    const e=JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode64(e.iv)},key,decode64(e.data));
+    const loaded=JSON.parse(new TextDecoder().decode(bytes));
+    if(!loaded||!Array.isArray(loaded.records)||!Array.isArray(loaded.categories)||!Array.isArray(loaded.recurrings))throw new Error('データの形式が正しくありません。');
+    state=loaded;sessionKey=key;sessionSalt=e.salt;
+    state.budgets ||= {};state.skippedOccurrences ||= [];
+    const generated=generateRecurring();
+    if(generated){await persistState();}
+    showApp();if(generated)toast(`定期支出を${generated}件登録しました。`);
+  }catch(err){
+    console.warn('Auto unlock unavailable:',err);
+    sessionKey=null;sessionSalt=null;state=initialState();
+    localStorage.removeItem(AUTO_UNLOCK_FLAG);
+    try{await deviceKeyStore('delete');}catch{}
+    setupAuth();
+    $('#authDescription').textContent='自動ログインができませんでした。数字パスワードで開いてください。';
+  }finally{button.disabled=false;}
+}
+$('#loginOnLaunch').addEventListener('change',async(event)=>{
+  const required=event.target.checked;
+  event.target.disabled=true;
+  try{await setLoginRequired(required);toast(required?'次回から起動時にパスワードを求めます。':'次回からこの端末ではログインを省略します。');}
+  catch(err){console.error(err);renderLoginPreference();toast('変更できませんでした。ブラウザの保存設定をご確認ください。',true);}
+  finally{event.target.disabled=false;}
+});
 function toast(message,isError=false){const box=$('#toast');box.textContent=message;box.style.background=isError?'#ab4646':'';box.classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>box.classList.add('hidden'),3300);}
 function setupAuth(){$('#appVersion').textContent=`支出の余白　Ver.${APP_VERSION}`;const hasData=Boolean(localStorage.getItem(STORAGE_KEY));$('#confirmWrap').classList.toggle('hidden',hasData);$('#authDescription').textContent=hasData?'パスワードを入力すると、記録を開けます。':'この端末に、パスワードで保護された家計簿をつくります。';$('#authSubmit').textContent=hasData?'家計簿を開く':'家計簿をはじめる';$('#authError').textContent='';$('#authPassword').value='';$('#authConfirm').value='';$('#authPassword').autocomplete=hasData?'current-password':'new-password';$('#authPassword').previousElementSibling.textContent=hasData?'パスワード（数字入力対応）':'数字パスワード（4桁以上）';$('#authPassword').placeholder=hasData?'パスワードを入力':'数字4桁以上';}
-function showApp(){const t=today();$('#authScreen').classList.add('hidden');$('#app').classList.remove('hidden');$('#headerDate').textContent=`${Number(t.slice(5,7))}月${Number(t.slice(8,10))}日`;viewMonth=t.slice(0,7);selectedDay=t;resetEntry();renderAll();goTab('record');}
+function showApp(){renderLoginPreference();const t=today();$('#authScreen').classList.add('hidden');$('#app').classList.remove('hidden');$('#headerDate').textContent=`${Number(t.slice(5,7))}月${Number(t.slice(8,10))}日`;viewMonth=t.slice(0,7);selectedDay=t;resetEntry();renderAll();goTab('record');}
 async function lockApp(){await saveQueue.catch(()=>{});sessionKey=null;sessionSalt=null;state=initialState();$('#app').classList.add('hidden');$('#authScreen').classList.remove('hidden');$$('.modal').forEach(m=>m.classList.add('hidden'));document.body.style.overflow='';setupAuth();}
 $('#authForm').addEventListener('submit',async(e)=>{e.preventDefault();const pw=$('#authPassword').value,hasData=Boolean(localStorage.getItem(STORAGE_KEY));const btn=$('#authSubmit');$('#authError').textContent='';if(hasData?!pw:!/^\d{4,}$/.test(pw)){$('#authError').textContent=hasData?'パスワードを入力してください。':'数字4桁以上で設定してください。';return;}if(!hasData&&pw!==$('#authConfirm').value){$('#authError').textContent='確認用のパスワードが一致しません。';return;}if(!globalThis.crypto?.subtle){$('#authError').textContent='暗号化機能が利用できません。HTTPSのGitHub Pagesで開いてください。';return;}
   btn.disabled=true;btn.textContent=hasData?'照合しています…':'暗号化しています…';
@@ -314,9 +390,10 @@ function csvCell(value){let s=String(value??'');if(/^[\s\u0000-\u001f]*[=+@\-]/.
 $('#exportCsv').addEventListener('click',()=>{const header=['記録日','カテゴリー','金額（円）','支出の種類','評価（1-5）','評価の内容','メモ','定期支出'];const rows=sortedRecords(state.records).map(r=>[r.date,categoryById(r.category).name,r.amount,r.planned==='unexpected'?'予期していない':'予定していた',r.rating,RATING_NAMES[r.rating]||'',r.memo||'',r.recurringId?'はい':'いいえ']);const csv='\ufeff'+[header,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n');downloadFile(`支出の余白_${today()}.csv`,csv,'text/csv;charset=utf-8');toast('CSVを書き出しました。');});
 $('#exportBackup').addEventListener('click',async()=>{try{await saveQueue;const data=localStorage.getItem(STORAGE_KEY);downloadFile(`支出の余白_暗号化バックアップ_${today()}.json`,data,'application/json');toast('暗号化バックアップを書き出しました。');}catch{toast('バックアップの作成に失敗しました。',true);}});
 $('#importBackup').addEventListener('click',()=>{$('#backupFile').click();});
-$('#backupFile').addEventListener('change',async(e)=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;try{if(file.size>20*1024*1024)throw Error('バックアップファイルが大きすぎます。');const raw=await file.text(),data=JSON.parse(raw);if(data.version!==1||typeof data.salt!=='string'||typeof data.iv!=='string'||typeof data.data!=='string')throw Error('暗号化バックアップの形式ではありません。');if(!confirm('現在の支出記録をバックアップの内容で上書きします。先に今のバックアップを書き出しましたか？'))return;await saveQueue;localStorage.setItem(STORAGE_KEY,JSON.stringify(data));await lockApp();toast('バックアップを読み込みました。バックアップのパスワードで開いてください。');}catch(err){toast(err.message||'復元に失敗しました。',true);}});
-$('#changePassword').addEventListener('click',async()=>{const pass=$('#newPassword').value,check=$('#newPasswordConfirm').value;if(!/^\d{4,}$/.test(pass)){toast('新しいパスワードは数字4桁以上で入力してください。',true);return;}if(pass!==check){toast('新しいパスワードが一致しません。',true);return;}if(!confirm('パスワードを変更しますか？以前のパスワードでは開けなくなります。'))return;const button=$('#changePassword');button.disabled=true;try{await saveQueue;const previousKey=sessionKey,previousSalt=sessionSalt;sessionSalt=newSalt();sessionKey=await deriveKey(pass,sessionSalt);try{await persistState();}catch(err){sessionKey=previousKey;sessionSalt=previousSalt;throw err;}$('#newPassword').value='';$('#newPasswordConfirm').value='';toast('パスワードを変更しました。');}catch{toast('パスワードの変更に失敗しました。',true);}finally{button.disabled=false;}});
+$('#backupFile').addEventListener('change',async(e)=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;try{if(file.size>20*1024*1024)throw Error('バックアップファイルが大きすぎます。');const raw=await file.text(),data=JSON.parse(raw);if(data.version!==1||typeof data.salt!=='string'||typeof data.iv!=='string'||typeof data.data!=='string')throw Error('暗号化バックアップの形式ではありません。');if(!confirm('現在の支出記録をバックアップの内容で上書きします。先に今のバックアップを書き出しましたか？'))return;await saveQueue;localStorage.removeItem(AUTO_UNLOCK_FLAG);try{await deviceKeyStore('delete');}catch{}localStorage.setItem(STORAGE_KEY,JSON.stringify(data));await lockApp();toast('バックアップを読み込みました。バックアップのパスワードで開いてください。');}catch(err){toast(err.message||'復元に失敗しました。',true);}});
+$('#changePassword').addEventListener('click',async()=>{const pass=$('#newPassword').value,check=$('#newPasswordConfirm').value;if(!/^\d{4,}$/.test(pass)){toast('新しいパスワードは数字4桁以上で入力してください。',true);return;}if(pass!==check){toast('新しいパスワードが一致しません。',true);return;}if(!confirm('パスワードを変更しますか？以前のパスワードでは開けなくなります。'))return;const button=$('#changePassword');button.disabled=true;try{await saveQueue;const previousKey=sessionKey,previousSalt=sessionSalt;sessionSalt=newSalt();sessionKey=await deriveKey(pass,sessionSalt);try{await persistState();}catch(err){sessionKey=previousKey;sessionSalt=previousSalt;throw err;}if(autoUnlockEnabled()){try{await deviceKeyStore('put',sessionKey);}catch(err){localStorage.removeItem(AUTO_UNLOCK_FLAG);renderLoginPreference();toast('パスワードは変更しましたが、自動ログインは解除されました。',true);$('#newPassword').value='';$('#newPasswordConfirm').value='';return;}}$('#newPassword').value='';$('#newPasswordConfirm').value='';toast('パスワードを変更しました。');}catch{toast('パスワードの変更に失敗しました。',true);}finally{button.disabled=false;}});
 
 /* 見た目はすぐに読み込み、記録はパスワード入力後のみ復号 */
 setupAuth();
+attemptAutoUnlock();
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
