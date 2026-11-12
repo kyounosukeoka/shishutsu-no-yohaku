@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=6">
   <title>支出の余白｜暮らしを見直す支出記録</title>
 </head>
 <body>
@@ -114,13 +114,13 @@
               <div class="budget-summary-track" aria-hidden="true"><div id="budgetSummaryFill"></div></div>
               <p id="budgetSummaryNote" class="budget-summary-note"></p>
             </div>
-            <div id="budgetSettings" class="budget-settings"></div><button id="saveBudgets" type="button" class="btn btn-primary">予算を保存</button></section>
+            <p class="budget-scroll-label" id="budgetScrollLabel">カテゴリーを6項目ずつ表示します。枠内をスクロールして確認できます。</p><div id="budgetSettings" class="budget-settings" tabindex="0" aria-label="カテゴリー別の月間予算。6項目ずつ表示、枠内スクロール可能" aria-describedby="budgetScrollLabel"></div><button id="saveBudgets" type="button" class="btn btn-primary">予算を保存</button></section>
           <section class="card padded category-sort-section" aria-labelledby="categorySortTitle">
             <div class="section-title-row"><div>
               <h3 id="categorySortTitle">カテゴリーの表示順</h3>
-              <p class="muted tiny">支出の登録画面は左から4つずつ並びます。1行目・2行目…の各場所に表示するカテゴリーを選んでください。</p>
+              <p class="muted tiny">登録画面と同じ、1行4つの並びです。初期カテゴリーも追加カテゴリーも入れ替えられます。</p>
             </div></div>
-            <p class="category-sort-note">別の場所にあるカテゴリーを選ぶと、2つの位置が入れ替わります。順番は自動保存されます。</p>
+            <p class="category-sort-note">変更したい位置をタップして、そこに表示したいカテゴリーを選んでください。2つの位置が入れ替わり、自動保存されます。</p>
             <div id="categoryOrderSettings" class="category-order-settings" aria-label="カテゴリーの表示順を変更"></div>
           </section>
           <section class="card padded"><div class="section-title-row"><div><h3>定期的な支出</h3><p class="muted tiny">家賃やサブスクなど。支払日になり、アプリを開いたときに自動記録します。</p></div><button id="openRecurring" type="button" class="btn btn-secondary">＋ 定期支出を追加</button></div><div id="recurringList"></div></section>
@@ -145,7 +145,15 @@
   </div>
 
   <div id="recurringModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="recurringTitle"><div class="modal-backdrop" data-close="recurring"></div><div class="recurring-dialog"><div class="modal-top"><h3 id="recurringTitle">定期支出を登録</h3><button class="close-btn" type="button" data-close="recurring" aria-label="閉じる">×</button></div><form id="recurringForm" class="recurring-form"><label for="recurringName">名称</label><input id="recurringName" type="text" maxlength="60" required placeholder="例：家賃、動画配信サービス"><label for="recurringAmount">金額（円）</label><input id="recurringAmount" type="number" inputmode="numeric" min="1" max="999999999" step="1" required placeholder="例：1200"><label for="recurringCategory">カテゴリー</label><select id="recurringCategory" required></select><label for="recurringFrequency">繰り返し</label><select id="recurringFrequency"><option value="weekly">毎週</option><option value="monthly" selected>毎月</option><option value="yearly">毎年</option></select><label for="recurringStart">初回の支払予定日</label><input id="recurringStart" type="date" required><label for="recurringPlan">支出の種類</label><select id="recurringPlan"><option value="planned">予定していた支出</option><option value="unexpected">予期していない支出</option></select><label for="recurringRating">支出の評価</label><select id="recurringRating"><option value="1">1：無駄な出費だった</option><option value="2">2：やや無駄だった</option><option value="3" selected>3：どちらともいえない</option><option value="4">4：良い支出だった</option><option value="5">5：支払って良かった</option></select><button class="btn btn-primary btn-full" type="submit">定期支出を登録する</button></form></div></div>
+  <div id="categoryOrderModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="categoryOrderModalTitle" aria-describedby="categoryOrderModalDescription">
+    <div class="modal-backdrop" data-close="categoryOrder"></div>
+    <div class="category-order-dialog">
+      <div class="modal-top"><h3 id="categoryOrderModalTitle">カテゴリーを入れ替える</h3><button type="button" class="close-btn" data-close="categoryOrder" aria-label="閉じる">×</button></div>
+      <p id="categoryOrderModalDescription" class="category-order-dialog-note"></p>
+      <div id="categoryOrderOptions" class="category-order-options" role="group" aria-label="表示したいカテゴリーを選ぶ"></div>
+    </div>
+  </div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=6" defer></script>
 </body>
 </html>
