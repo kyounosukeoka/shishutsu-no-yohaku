@@ -162,3 +162,10 @@ button,.tab,.calc-key,.category-choice,.rating-btn,.segment{touch-action:manipul
 .login-preference-row strong{font-size:14px;}
 .login-preference-row small{font-size:12px;line-height:1.5;opacity:.75;}
 .login-preference-row input{flex:none;width:24px;height:24px;accent-color:#2e695c;cursor:pointer;}
+
+/* Ver.9: 日付とクイック保存を同一行に配置 */
+.entry-date-save-row{display:flex;align-items:stretch;gap:10px;min-width:0}
+.entry-date-save-row .date-input{flex:1 1 42%;min-width:0;max-width:none;width:0}
+.entry-quick-save{flex:1 1 58%;min-width:0;white-space:normal;line-height:1.35;padding:9px 10px;text-align:center}
+@media(min-width:641px){.entry-date-save-row{max-width:620px}}
+@media(max-width:390px){.entry-date-save-row{gap:7px}.entry-quick-save{font-size:11px;padding:8px 5px}.entry-date-save-row .date-input{font-size:13px;padding:9px 6px}}

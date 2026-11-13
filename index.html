@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
   <title>支出の余白｜暮らしを見直す支出記録</title>
 </head>
 <body>
@@ -59,7 +59,10 @@
             <label class="field-label" for="entryMemo">使い道・メモ <span class="optional">任意</span></label>
             <textarea id="entryMemo" rows="2" maxlength="300" placeholder="例：帰り道に買ったコーヒー"></textarea>
             <label class="field-label" for="entryDate">記録日</label>
-            <input id="entryDate" class="date-input" type="date" required>
+            <div class="entry-date-save-row">
+              <input id="entryDate" class="date-input" type="date" required>
+              <button id="submitRecordQuick" class="btn btn-primary entry-quick-save" type="submit">＋ この支出を記録する</button>
+            </div>
             <hr class="soft-line">
             <div class="section-top"><span class="step-number">02</span><h3>カテゴリーを選択</h3></div>
             <div id="categoryGrid" class="category-grid" role="group" aria-label="カテゴリー"></div>
@@ -142,7 +145,7 @@
             <p class="alert-text tiny" id="loginSecurityNote">オフにすると、同じブラウザを使う人も記録を閲覧できます。記録の暗号化は維持されますが、復号鍵を端末内に保存します。共有端末ではオンを推奨します。</p>
           </section>
           <section class="card padded"><h3>パスワードの変更</h3><p class="muted settings-desc">新しい数字パスワード（4桁以上）で記録を再暗号化します。推測されにくい6〜8桁以上を推奨します。</p><div class="password-change"><input id="newPassword" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワード"><input id="newPasswordConfirm" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワードをもう一度"><button id="changePassword" type="button" class="btn btn-outline">パスワードを変更</button></div></section>
-          <div class="settings-footer"><span id="appVersion" class="settings-version">支出の余白　Ver.8.0.0</span><span>記録はこの端末だけに暗号化保存され、外部サーバーへ送信しません。</span></div>
+          <div class="settings-footer"><span id="appVersion" class="settings-version">支出の余白　Ver.9.0.0</span><span>記録はこの端末だけに暗号化保存され、外部サーバーへ送信しません。</span></div>
         </div>
       </section>
     </main>
@@ -175,6 +178,6 @@
     </div>
   </div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <script src="app.js?v=8" defer></script>
+  <script src="app.js?v=9" defer></script>
 </body>
 </html>
