@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
   <title>支出の余白｜暮らしを見直す支出記録</title>
 </head>
 <body>
@@ -44,7 +44,7 @@
       <button class="tab active" data-tab="record" type="button"><span class="tab-icon">✎</span><span>記録</span></button>
       <button class="tab" data-tab="home" type="button"><span class="tab-icon">▤</span><span>ホーム</span></button>
       <button class="tab" data-tab="calendar" type="button"><span class="tab-icon">▦</span><span>カレンダー</span></button>
-      <button class="tab" data-tab="ledger" type="button"><span class="tab-icon">▦</span><span>家計簿</span></button>
+      <button class="tab" data-tab="ledger" type="button"><span class="tab-icon" aria-hidden="true">📖</span><span>家計簿</span></button>
       <button class="tab" data-tab="analysis" type="button"><span class="tab-icon">◉</span><span>分析</span></button>
       <button class="tab" data-tab="settings" type="button"><span class="tab-icon">⚙</span><span>設定</span></button>
     </nav>
@@ -101,7 +101,7 @@
       </section>
 
       <section id="page-ledger" class="page" aria-label="家計簿形式の支出一覧">
-        <div class="page-heading"><div><span class="eyebrow">SPENDING LEDGER</span><h2>支出の家計簿</h2><p class="muted">日付ごとの明細を、罫線入りの表で見渡す。</p></div></div>
+        <div class="page-heading"><div><span class="eyebrow">SPENDING LEDGER</span><h2>支出の家計簿</h2><p class="muted">カテゴリー順に並べて、同じ使い道を日付ごとに見比べる。</p></div></div>
         <div class="card padded ledger-controls">
           <div class="ledger-range-bar" role="group" aria-label="家計簿の表示期間">
             <button class="ledger-mode selected" type="button" data-ledger-mode="three">3日</button>
@@ -109,9 +109,10 @@
             <button class="ledger-mode" type="button" data-ledger-mode="month">月表示</button>
           </div>
           <div class="ledger-period-bar"><button type="button" class="month-arrow" id="ledgerPrev" aria-label="前の期間">‹</button><strong id="ledgerPeriod"></strong><button type="button" class="month-arrow" id="ledgerNext" aria-label="次の期間">›</button><button class="btn btn-outline ledger-today" type="button" id="ledgerToday">今日へ</button></div>
-          <p class="muted tiny ledger-help">表の内側を上下左右にスクロールできます。予定外の支出は赤字で表示します。</p>
-          <div class="ledger-export-actions"><button type="button" class="btn btn-primary" id="ledgerPdf">↓ PDF印刷・保存（A4横）</button><button type="button" class="btn btn-secondary" id="ledgerPng">↓ PNG</button><button type="button" class="btn btn-outline" id="ledgerJpeg">↓ JPEG</button></div>
-          <p class="muted tiny">PDFは端末の印刷画面から「PDFとして保存」を選択してください。出力は7日ごとに区切られ、月表示は複数ページになります。画像も7日ごとのページを縦に連結して保存します。</p>
+          <p class="muted tiny ledger-help">表の内側を上下左右にスクロールできます。カテゴリーの切り替わりは太線、予定外の支出は赤字です。</p>
+          <div class="ledger-export-actions"><button type="button" class="btn btn-primary" id="ledgerPdf">↓ PDF（A4横・7日／頁）</button><button type="button" class="btn btn-secondary" id="ledgerPng">↓ PNG</button><button type="button" class="btn btn-outline" id="ledgerJpeg">↓ JPEG</button></div>
+          <p class="muted tiny">PDFは印刷画面を使用せず、A4横・7日ごとのファイルとして作成します。iPhoneでは生成後に表示される保存用リンクをタップし、共有メニューから「ファイルに保存」を選んでください。画像も出力できます。</p>
+        <div id="ledgerExportResult" class="ledger-export-result" aria-live="polite"></div>
         </div>
         <div class="ledger-scroll" id="ledgerScroll" tabindex="0" aria-label="支出家計簿。上下左右にスクロール可能"><table class="ledger-table" id="ledgerTable"></table></div>
         <div class="ledger-outside-total" id="ledgerTotal"></div>
@@ -163,7 +164,7 @@
             <p class="alert-text tiny" id="loginSecurityNote">オフにすると、同じブラウザを使う人も記録を閲覧できます。記録の暗号化は維持されますが、復号鍵を端末内に保存します。共有端末ではオンを推奨します。</p>
           </section>
           <section class="card padded"><h3>パスワードの変更</h3><p class="muted settings-desc">新しい数字パスワード（4桁以上）で記録を再暗号化します。推測されにくい6〜8桁以上を推奨します。</p><div class="password-change"><input id="newPassword" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワード"><input id="newPasswordConfirm" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="新しいパスワードをもう一度"><button id="changePassword" type="button" class="btn btn-outline">パスワードを変更</button></div></section>
-          <div class="settings-footer"><span id="appVersion" class="settings-version">支出の余白　Ver.9.0.0</span><span>記録はこの端末だけに暗号化保存され、外部サーバーへ送信しません。</span></div>
+          <div class="settings-footer"><span id="appVersion" class="settings-version">支出の余白　Ver.11.0.0</span><span>記録はこの端末だけに暗号化保存され、外部サーバーへ送信しません。</span></div>
         </div>
       </section>
     </main>
@@ -196,6 +197,6 @@
     </div>
   </div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <script src="app.js?v=10" defer></script>
+  <script src="app.js?v=11" defer></script>
 </body>
 </html>

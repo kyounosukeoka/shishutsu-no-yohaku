@@ -19,7 +19,7 @@ const CATEGORIES=[
 const EXTRA_COLORS=['#8aa7b8','#b39ebd','#d4a381','#8fb69e','#bfa774','#c79eaa','#97a8c3','#b7b68d'];
 const COLOR_PALETTE=['#72a58c','#2e695c','#a2bf94','#8c9bbe','#4c80a7','#94b1bb','#9e98c1','#7665a7','#c78ea4','#d76883','#b74847','#ca946e','#d1b35c','#c6a051','#a9987b','#b5a17c','#939c9b','#4d6868','#343e4b','#8fb69e','#f3b59b','#ddabcf','#b7b68d','#e2cdb1'];
 const normalizeColor=(color)=>/^#[0-9a-f]{6}$/i.test(String(color||''))?String(color).toLowerCase():'#939c9b';
-const APP_VERSION='10.0.0';
+const APP_VERSION='11.0.0';
 const AUTO_UNLOCK_FLAG='shishutsu-no-yohaku-auto-unlock-v1';
 const KEY_DB='shishutsu-no-yohaku-device-key-v1';
 /* カテゴリー登録用：端末に標準搭載された絵文字から選択 */
@@ -385,8 +385,10 @@ $$('[data-close]').forEach(el=>el.addEventListener('click',()=>{if(el.dataset.cl
 $('#recurringForm').addEventListener('submit',(e)=>{e.preventDefault();const name=$('#recurringName').value.trim(),amount=Number($('#recurringAmount').value),category=$('#recurringCategory').value,frequency=$('#recurringFrequency').value,startDate=$('#recurringStart').value,planned=$('#recurringPlan').value,rating=Number($('#recurringRating').value);if(!name||!Number.isSafeInteger(amount)||amount<1||amount>999999999||!state.categories.some(c=>c.id===category)||!validDate(startDate)||!['weekly','monthly','yearly'].includes(frequency)){toast('定期支出の入力内容を確認してください。',true);return;}state.recurrings.push({id:safeId(),name,amount,category,frequency,startDate,planned,rating,nextIndex:0});const count=generateRecurring();queueSave();modal('recurring',false);renderAll();toast(`定期支出を登録しました。${count?'初回の支出も記録しました。':''}`);});
 $('#recurringList').addEventListener('click',(e)=>{const b=e.target.closest('[data-delete-recurring]');if(!b)return;if(!confirm('この定期支出の今後の自動登録を停止しますか？\n※すでに登録済みの支出は残ります。'))return;state.recurrings=state.recurrings.filter(r=>r.id!==b.dataset.deleteRecurring);queueSave();renderSettings();toast('定期支出の自動登録を停止しました。');});
 
-/* 家計簿形式：表示のみ。既存の暗号化保存データは変更しない。 */
+/* 家計簿：カテゴリー順＋同じ使い道を横並びに統合。暗号化記録自体は変更しない。 */
 const LEDGER_WEEKDAYS=['日','月','火','水','木','金','土'];
+const LEDGER_CANVAS_WIDTH=1500,LEDGER_CANVAS_HEIGHT=1060,LEDGER_ROWS_PER_PAGE=11;
+let ledgerDownloadUrls=[];
 function ledgerDates(){
   let first,count;
   if(ledgerMode==='three'){first=addDays(ledgerAnchor,-2);count=3;}
@@ -394,76 +396,219 @@ function ledgerDates(){
   else{first=ledgerAnchor.slice(0,7)+'-01';const [y,m]=first.split('-').map(Number);count=new Date(Date.UTC(y,m,0)).getUTCDate();}
   return Array.from({length:count},(_,i)=>addDays(first,i));
 }
-function ledgerColumns(dates){const byDate=new Map(dates.map(d=>[d,[]]));for(const r of state.records){if(byDate.has(r.date))byDate.get(r.date).push(r);}for(const recs of byDate.values())recs.sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));return byDate;}
 function ledgerHeaderDate(d){return `${Number(d.slice(5,7))}/${Number(d.slice(8,10))}（${LEDGER_WEEKDAYS[parseISO(d).getUTCDay()]}）`;}
-function ledgerPeriods(){const dates=ledgerDates();return [dates[0],dates[dates.length-1]];}
+function ledgerItemName(r){return String(r.memo||'').trim().replace(/\s+/g,' ')||'使い道未入力';}
+/* 同一カテゴリー＋同一メモを一行にまとめる。なお同じ日に重複した場合は
+   各支出が失われないよう２行目以降へ分け、別日の同一項目と対応させる。 */
+function ledgerBuild(dates){
+  const dateSet=new Set(dates),ordered=new Map(state.categories.map((c,i)=>[c.id,i]));
+  const recs=state.records.filter(r=>dateSet.has(r.date)).sort((a,b)=>
+    a.date.localeCompare(b.date)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id||'').localeCompare(String(b.id||'')));
+  const categories=new Map(),totals=new Map(dates.map(d=>[d,0]));
+  for(const r of recs){
+    totals.set(r.date,totals.get(r.date)+Number(r.amount||0));
+    if(!categories.has(r.category))categories.set(r.category,new Map());
+    const items=categories.get(r.category),label=ledgerItemName(r);
+    if(!items.has(label))items.set(label,new Map());
+    const grouped=items.get(label);
+    if(!grouped.has(r.date))grouped.set(r.date,[]);
+    grouped.get(r.date).push(r);
+  }
+  const rows=[];
+  const keys=[...categories.keys()].sort((a,b)=>(ordered.get(a)??999)-(ordered.get(b)??999)||String(a).localeCompare(String(b)));
+  for(const id of keys){
+    for(const [label,byDate] of categories.get(id)){
+      const count=Math.max(1,...[...byDate.values()].map(items=>items.length));
+      for(let i=0;i<count;i++){
+        const values=new Map();
+        for(const d of dates){const record=byDate.get(d)?.[i];if(record)values.set(d,record);}
+        rows.push({categoryId:id,category:categoryById(id),label,ordinal:i+1,byDate:values,total:sum([...values.values()])});
+      }
+    }
+  }
+  return {dates,rows,totals,grandTotal:sum(recs),recordCount:recs.length};
+}
+function ledgerCategoryStart(rows,i){return i===0||rows[i].categoryId!==rows[i-1].categoryId;}
+function ledgerRowLabel(row){return row.ordinal>1?`${row.label}（${row.ordinal}件目）`:row.label;}
 function renderLedger(){
-  const dates=ledgerDates(),byDate=ledgerColumns(dates),maxRows=Math.max(4,...dates.map(d=>byDate.get(d).length));
+  const dates=ledgerDates(),ledger=ledgerBuild(dates);
   $$('.ledger-mode').forEach(b=>{const selected=b.dataset.ledgerMode===ledgerMode;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});
   $('#ledgerPeriod').textContent=`${dates[0]} ～ ${dates[dates.length-1]}`;
-  let out='<thead><tr><th class="ledger-index">明細</th>'+dates.map(d=>`<th class="ledger-date ${d===today()?'ledger-current':''}">${escapeHTML(ledgerHeaderDate(d))}${d===today()?'<small>本日</small>':''}</th>`).join('')+'<th class="ledger-total-col">行の合計</th></tr></thead><tbody>';
-  for(let row=0;row<maxRows;row++){
-    let rowTotal=0;out+=`<tr><th class="ledger-index">${row+1}</th>`;
-    for(const d of dates){const r=byDate.get(d)[row];if(!r){out+='<td class="ledger-empty">—</td>';continue;}rowTotal+=Number(r.amount||0);const cat=categoryById(r.category);out+=`<td class="ledger-entry ${r.planned==='unexpected'?'ledger-unexpected':''}"><div class="ledger-entry-cat">${escapeHTML(cat.icon)} ${escapeHTML(cat.name)}</div><div class="ledger-entry-memo">${escapeHTML(r.memo||'（メモなし）')}</div><strong>${yen(r.amount)}</strong></td>`;}
-    out+=`<td class="ledger-total-col">${rowTotal?yen(rowTotal):'—'}</td></tr>`;
+  let out='<thead><tr><th scope="col" class="ledger-index">カテゴリー・使い道</th>'+dates.map(d=>`<th scope="col" class="ledger-date ${d===today()?'ledger-current':''}">${escapeHTML(ledgerHeaderDate(d))}${d===today()?'<small>本日</small>':''}</th>`).join('')+'<th scope="col" class="ledger-total-col">行の合計</th></tr></thead><tbody>';
+  if(!ledger.rows.length){
+    out+='<tr><th class="ledger-index">記録なし</th>'+dates.map(()=>'<td class="ledger-empty">—</td>').join('')+'<td class="ledger-total-col">—</td></tr>';
   }
-  const grandTotal=sum(dates.flatMap(d=>byDate.get(d)));
-  out+='<tr class="ledger-sum"><th class="ledger-index">日別合計</th>'+dates.map(d=>`<td>${yen(sum(byDate.get(d)))}</td>`).join('')+`<td class="ledger-total-col">${yen(grandTotal)}</td></tr></tbody>`;
+  ledger.rows.forEach((row,i)=>{
+    const start=ledgerCategoryStart(ledger.rows,i),groupClass=start?' ledger-category-start':'';
+    out+=`<tr class="ledger-item-row${groupClass}"><th scope="row" class="ledger-index ledger-item-label"><span class="ledger-entry-cat"><span class="ledger-cat-dot" style="background:${normalizeColor(row.category.color)}"></span>${escapeHTML(row.category.icon)} ${escapeHTML(row.category.name)}</span><span class="ledger-item-memo">${escapeHTML(ledgerRowLabel(row))}</span></th>`;
+    for(const d of dates){
+      const r=row.byDate.get(d);
+      out+=r?`<td class="ledger-entry ${r.planned==='unexpected'?'ledger-unexpected':''}"><strong>${yen(r.amount)}</strong>${r.planned==='unexpected'?'<small>予定外</small>':''}</td>`:'<td class="ledger-empty">—</td>';
+    }
+    out+=`<td class="ledger-total-col">${yen(row.total)}</td></tr>`;
+  });
+  out+='<tr class="ledger-sum"><th class="ledger-index">日別合計</th>'+dates.map(d=>`<td>${yen(ledger.totals.get(d))}</td>`).join('')+`<td class="ledger-total-col">${yen(ledger.grandTotal)}</td></tr></tbody>`;
   $('#ledgerTable').innerHTML=out;
-  $('#ledgerTotal').textContent=`表示期間の支出合計：${yen(grandTotal)}（${dates.reduce((n,d)=>n+byDate.get(d).length,0)}件）`;
-  const scroller=$('#ledgerScroll');if(ledgerMode==='month'){
-    requestAnimationFrame(()=>{const now=dates.indexOf(today());if(now>=0){const cells=$$('#ledgerTable thead .ledger-date');const selected=cells[now];if(selected)scroller.scrollLeft=Math.max(0,selected.offsetLeft-scroller.clientWidth/3);}else scroller.scrollLeft=0;});
+  $('#ledgerTotal').textContent=`表示期間の支出合計：${yen(ledger.grandTotal)}（${ledger.recordCount}件／${ledger.rows.length}項目行）`;
+  const scroller=$('#ledgerScroll');
+  if(ledgerMode==='month'){
+    requestAnimationFrame(()=>{const now=dates.indexOf(today());if(now>=0){const cell=$$('#ledgerTable thead .ledger-date')[now];if(cell)scroller.scrollLeft=Math.max(0,cell.offsetLeft-scroller.clientWidth/3);}else scroller.scrollLeft=0;});
   }else scroller.scrollLeft=0;
 }
 $$('[data-ledger-mode]').forEach(b=>b.addEventListener('click',()=>{ledgerMode=b.dataset.ledgerMode;ledgerAnchor=today();renderLedger();}));
 function ledgerMove(direction){if(ledgerMode==='three')ledgerAnchor=addDays(ledgerAnchor,3*direction);else if(ledgerMode==='week')ledgerAnchor=addDays(ledgerAnchor,7*direction);else ledgerAnchor=shiftMonth(ledgerAnchor.slice(0,7),direction)+'-01';renderLedger();}
-$('#ledgerPrev').addEventListener('click',()=>ledgerMove(-1));$('#ledgerNext').addEventListener('click',()=>ledgerMove(1));$('#ledgerToday').addEventListener('click',()=>{ledgerAnchor=today();renderLedger();});
-function ledgerChunks(){const dates=ledgerDates();const result=[];for(let i=0;i<dates.length;i+=7)result.push(dates.slice(i,i+7));return result;}
+$('#ledgerPrev').addEventListener('click',()=>ledgerMove(-1));
+$('#ledgerNext').addEventListener('click',()=>ledgerMove(1));
+$('#ledgerToday').addEventListener('click',()=>{ledgerAnchor=today();renderLedger();});
+function ledgerChunks(){const dates=ledgerDates(),result=[];for(let i=0;i<dates.length;i+=7)result.push(dates.slice(i,i+7));return result;}
 function ledgerExportPages(){
   const pages=[];
   for(const dates of ledgerChunks()){
-    const all=ledgerColumns(dates),max=Math.max(1,...dates.map(d=>all.get(d).length));
-    for(let start=0;start<max;start+=12){
-      const columns=new Map(dates.map(d=>[d,all.get(d).slice(start,start+12)]));
-      pages.push({dates,columns,rowOffset:start,part:Math.floor(start/12)+1,rangeTotal:sum(dates.flatMap(d=>all.get(d)))});
+    const book=ledgerBuild(dates),rows=book.rows;
+    const totalPages=Math.max(1,Math.ceil(rows.length/LEDGER_ROWS_PER_PAGE));
+    for(let part=0;part<totalPages;part++){
+      pages.push({dates,rows:rows.slice(part*LEDGER_ROWS_PER_PAGE,(part+1)*LEDGER_ROWS_PER_PAGE),
+        rangeTotal:book.grandTotal,rangeCount:book.recordCount,part:part+1,totalParts:totalPages});
     }
   }
   return pages;
 }
-function ledgerPrintablePage(page){
-  const {dates,columns}=page,rows=Math.max(1,...dates.map(d=>columns.get(d).length)),total=sum(dates.flatMap(d=>columns.get(d)));
-  let html=`<article class="sheet"><header><h1>支出の余白　｜　家計簿</h1><p>${escapeHTML(dates[0])} ～ ${escapeHTML(dates[dates.length-1])}　　このページ ${yen(total)} ／ 7日間計 ${yen(page.rangeTotal)}${page.part>1?`（明細 ${page.part}頁）`:``}</p></header><table><thead><tr><th class="no">№</th>${dates.map(d=>`<th>${escapeHTML(ledgerHeaderDate(d))}</th>`).join('')}<th class="sum">合計</th></tr></thead><tbody>`;
-  for(let i=0;i<rows;i++){let rowTotal=0;html+=`<tr><th>${i+1+page.rowOffset}</th>`;for(const d of dates){const r=columns.get(d)[i];if(!r){html+='<td></td>';continue;}rowTotal+=Number(r.amount||0);const cat=categoryById(r.category);html+=`<td class="${r.planned==='unexpected'?'warn':''}"><span>${escapeHTML(cat.icon)} ${escapeHTML(cat.name)}</span><span>${escapeHTML(r.memo||'')}</span><b>${yen(r.amount)}</b></td>`;}html+=`<td class="total">${rowTotal?yen(rowTotal):''}</td></tr>`;}
-  html+=`<tr class="sumrow"><th>日計</th>${dates.map(d=>`<td>${yen(sum(columns.get(d)))}</td>`).join('')}<td>${yen(total)}</td></tr></tbody></table></article>`;return html;
-}
-const LEDGER_PRINT_CSS=`@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;color:#283b36;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif}.sheet{break-after:page;page-break-after:always}.sheet:last-child{break-after:auto;page-break-after:auto}header{display:flex;align-items:end;justify-content:space-between;margin:0 0 10px}h1{font-size:16px;margin:0}p{font-size:11px;margin:0}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #84948c;padding:5px 4px;font-size:9px;vertical-align:top;overflow-wrap:anywhere}thead th{background:#e6eee8;font-size:10px}th.no,tbody th{width:24px;text-align:center;background:#f4f7f3}th.sum,.total{width:66px;background:#f3f7f1;text-align:right;font-weight:bold}td span{display:block;line-height:1.3}td b{display:block;text-align:right;margin-top:3px;font-size:10px}.warn{color:#aa3333;background:#fff6f4}.sumrow td,.sumrow th{background:#e7efe9;font-weight:bold;text-align:right}`;
-$('#ledgerPdf').addEventListener('click',()=>{
-  const frames=ledgerExportPages();const frame=document.createElement('iframe');frame.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';frame.setAttribute('title','家計簿PDF印刷');document.body.appendChild(frame);
-  const doc=frame.contentDocument;doc.open();doc.write(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>支出の余白_家計簿</title><style>${LEDGER_PRINT_CSS}</style></head><body>${frames.map(ledgerPrintablePage).join('')}</body></html>`);doc.close();
-  setTimeout(()=>{try{frame.contentWindow.focus();frame.contentWindow.print();}catch(e){toast('印刷画面を開けませんでした。',true);}setTimeout(()=>frame.remove(),120000);},400);
-});
-function ledgerExportImage(type){
-  const pages=ledgerExportPages(),W=1480,H=1020,canvas=document.createElement('canvas');canvas.width=W;canvas.height=H*pages.length;
-  if(canvas.height>30000){toast('表示期間が長すぎます。短い期間を選択してください。',true);return;}
-  const ctx=canvas.getContext('2d');if(!ctx){toast('画像生成に対応していません。',true);return;}
-  const ink='#243c33',grid='#a5b5a9',green='#e9f0e9';ctx.textBaseline='middle';
-  function txt(str,x,y,size=19,bold=false,color=ink,align='left',maxWidth=300){ctx.fillStyle=color;ctx.font=`${bold?'bold ':''}${size}px sans-serif`;ctx.textAlign=align;ctx.fillText(String(str),x,y,maxWidth);}
-  function rect(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h);}
-  function line(x1,y1,x2,y2){ctx.strokeStyle=grid;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
-  pages.forEach((page,pi)=>{const top=pi*H;rect(0,top,W,H,'#fff');const {dates,columns}=page;const total=sum(dates.flatMap(d=>columns.get(d)));txt('支出の余白　｜　家計簿',40,top+47,29,true);txt(`${dates[0]} ～ ${dates[dates.length-1]}    期間合計 ${yen(total)}`,W-40,top+47,18,true,ink,'right',850);
-    const l=38,t=top+95,right=W-38,bottom=top+H-35,w=right-l,head=58,sumHeight=52,bodyHeight=bottom-t-head-sumHeight,indexWidth=40,totalWidth=110,colWidth=(w-indexWidth-totalWidth)/dates.length;
-    rect(l,t,w,head,green);rect(l,t+head+bodyHeight,w,sumHeight,green);const maxRows=Math.max(1,...dates.map(d=>columns.get(d).length));const rowH=bodyHeight/maxRows;
-    line(l,t,right,t);line(l,bottom,right,bottom);line(l,t,l,bottom);line(right,t,right,bottom);line(l,t+head,right,t+head);line(l,t+head+bodyHeight,right,t+head+bodyHeight);
-    txt('№',l+indexWidth/2,t+head/2,17,true,ink,'center',indexWidth);txt('日計',l+indexWidth/2,t+head+bodyHeight+sumHeight/2,15,true,ink,'center',indexWidth);
-    line(l+indexWidth,t,l+indexWidth,bottom);
-    dates.forEach((d,di)=>{const x=l+indexWidth+di*colWidth;line(x,t,x,bottom);txt(ledgerHeaderDate(d),x+colWidth/2,t+head/2,Math.min(17,130/Math.max(1,dates.length/4)),true,ink,'center',colWidth-4);txt(yen(sum(columns.get(d))),x+colWidth-6,t+head+bodyHeight+sumHeight/2,16,true,ink,'right',colWidth-12);});
-    const totalX=right-totalWidth;line(totalX,t,totalX,bottom);txt('合計',totalX+totalWidth/2,t+head/2,17,true,ink,'center');txt(yen(total),right-8,t+head+bodyHeight+sumHeight/2,18,true,ink,'right',totalWidth-10);
-    for(let i=0;i<maxRows;i++){const y=t+head+i*rowH;if(i>0)line(l,y,right,y);txt(String(i+1+page.rowOffset),l+indexWidth/2,y+Math.min(rowH/2,20),14,false,ink,'center');let rt=0;dates.forEach((d,di)=>{const r=columns.get(d)[i];if(!r)return;const x=l+indexWidth+di*colWidth;rt+=Number(r.amount||0);const color=r.planned==='unexpected'?'#b03d3d':ink;txt(categoryById(r.category).name,x+6,y+Math.min(20,rowH*.22),14,true,color,'left',colWidth-12);if(rowH>=55)txt(r.memo||'',x+6,y+Math.min(43,rowH*.48),13,false,color,'left',colWidth-12);txt(yen(r.amount),x+colWidth-6,y+rowH-Math.min(15,rowH*.25),15,true,color,'right',colWidth-12);});if(rt)txt(yen(rt),right-7,y+Math.min(rowH/2,24),15,true,ink,'right',totalWidth-12);}
+/* A4横と同じ比率の画像を、PDF/PNG/JPEGのすべてで共通利用する。 */
+function ledgerDrawPage(ctx,page,top,W=LEDGER_CANVAS_WIDTH,H=LEDGER_CANVAS_HEIGHT){
+  const ink='#263d34',grid='#9aaea1',soft='#ebf2ec',heavy='#5a7463';
+  const drawText=(v,x,y,size=18,bold=false,color=ink,align='left',width=280)=>{
+    ctx.fillStyle=color;ctx.font=`${bold?'700 ':'400 '}${size}px -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
+    ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillText(String(v),x,y,width);
+  };
+  const line=(x,y,x2,y2,width=1,color=grid)=>{ctx.beginPath();ctx.lineWidth=width;ctx.strokeStyle=color;ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke();};
+  const rect=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
+  rect(0,top,W,H,'#fff');
+  drawText('支出の余白　｜　家計簿',46,top+47,30,true);
+  drawText(`${page.dates[0]} ～ ${page.dates[page.dates.length-1]}　　7日以内の合計 ${yen(page.rangeTotal)}`,W-45,top+49,18,true,ink,'right',870);
+  drawText(`カテゴリーの表示順 ／ 同じ使い道は同じ行 ／ ${page.part}/${page.totalParts}頁${page.totalParts>1?'（この日付範囲）':''}`,46,top+81,15,false,'#5b7365','left',1200);
+  const l=40,r=W-40,t=top+113,b=top+H-39,headerH=61,footerH=60;
+  const labelW=246,totalW=124,dayW=(r-l-labelW-totalW)/page.dates.length;
+  const cols=[l,l+labelW];for(let i=1;i<=page.dates.length;i++)cols.push(l+labelW+i*dayW);cols.push(r);
+  const rows=page.rows.length?page.rows:[{categoryId:'',category:{name:'',icon:'',color:'#fff'},label:'記録なし',ordinal:1,byDate:new Map(),total:0}];
+  const bodyH=b-t-headerH-footerH,rowH=bodyH/Math.max(1,LEDGER_ROWS_PER_PAGE);
+  rect(l,t,r-l,headerH,soft);
+  rect(l,b-footerH,r-l,footerH,soft);
+  for(let i=0;i<=rows.length;i++){
+    const y=t+headerH+i*rowH;if(i===rows.length&&rows.length<LEDGER_ROWS_PER_PAGE)continue;
+    const categoryChange=i<rows.length&&ledgerCategoryStart(rows,i);
+    line(l,y,r,y,categoryChange?3:1,categoryChange?heavy:grid);
+  }
+  line(l,t,r,t,1.3,heavy);line(l,b,r,b,1.3,heavy);
+  line(l,b-footerH,r,b-footerH,2,heavy);
+  for(const x of cols)line(x,t,x,b,1,grid);
+  drawText('カテゴリー・使い道',l+10,t+headerH/2,19,true,ink,'left',labelW-14);
+  page.dates.forEach((d,i)=>drawText(ledgerHeaderDate(d),l+labelW+(i+.5)*dayW,t+headerH/2,19,true,ink,'center',dayW-8));
+  drawText('行の合計',r-totalW/2,t+headerH/2,19,true,ink,'center',totalW-9);
+  const pageDayTotals=new Map(page.dates.map(d=>[d,0]));
+  rows.forEach((row,i)=>{
+    const y=t+headerH+i*rowH;
+    if(row.categoryId){
+      rect(l+9,y+16,7,7,normalizeColor(row.category.color));
+      drawText(`${row.category.icon} ${row.category.name}`,l+22,y+24,16,true,ink,'left',labelW-29);
+      drawText(ledgerRowLabel(row),l+13,y+rowH*.68,16,false,ink,'left',labelW-22);
+    }else drawText('記録なし',l+14,y+rowH/2,16,false);
+    page.dates.forEach((d,di)=>{
+      const r0=row.byDate.get(d);if(!r0)return;
+      pageDayTotals.set(d,pageDayTotals.get(d)+Number(r0.amount||0));
+      const center=l+labelW+(di+.5)*dayW;
+      drawText(yen(r0.amount),center,y+rowH*.49,20,true,r0.planned==='unexpected'?'#b13d3b':ink,'center',dayW-12);
+      if(r0.planned==='unexpected')drawText('予定外',center,y+rowH*.78,12,false,'#b13d3b','center',dayW-12);
+    });
+    drawText(row.total?yen(row.total):'—',r-9,y+rowH*.49,19,true,ink,'right',totalW-14);
   });
-  const mime=type==='png'?'image/png':'image/jpeg';canvas.toBlob(blob=>{if(!blob){toast('画像を作成できませんでした。',true);return;}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`支出の余白_家計簿_${ledgerDates()[0]}_${ledgerMode}.${type==='png'?'png':'jpg'}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);toast(`${type.toUpperCase()}を書き出しました。`);},mime,.92);
+  const footY=b-footerH/2;
+  drawText('日別合計',l+labelW/2,footY,19,true,ink,'center',labelW-10);
+  page.dates.forEach((d,i)=>drawText(yen(pageDayTotals.get(d)),l+labelW+(i+.5)*dayW,footY,18,true,ink,'center',dayW-12));
+  drawText(yen([...pageDayTotals.values()].reduce((a,b)=>a+b,0)),r-9,footY,20,true,ink,'right',totalW-14);
 }
-$('#ledgerPng').addEventListener('click',()=>ledgerExportImage('png'));
-$('#ledgerJpeg').addEventListener('click',()=>ledgerExportImage('jpeg'));
+function ledgerCanvas(){const canvas=document.createElement('canvas');canvas.width=LEDGER_CANVAS_WIDTH;canvas.height=LEDGER_CANVAS_HEIGHT;return canvas;}
+function ledgerCanvasBlob(canvas,mime,quality=.9){return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('ファイルを生成できませんでした。')),mime,quality));}
+/* 印刷用非表示iframeを使わず、各ページJPEGをPDFの画像XObjectとして直接埋め込む。 */
+function ledgerPdfBlob(images){
+  const encoder=new TextEncoder(),parts=[],offsets=[0];let size=0;
+  const append=part=>{const bytes=typeof part==='string'?encoder.encode(part):part;parts.push(bytes);size+=bytes.byteLength;};
+  const obj=(id,body)=>{offsets[id]=size;append(`${id} 0 obj\n${body}\nendobj\n`);};
+  append('%PDF-1.4\n%Yohaku\n');
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  const kids=images.map((_,i)=>`${3+i*3} 0 R`).join(' ');
+  obj(2,`<< /Type /Pages /Kids [ ${kids} ] /Count ${images.length} >>`);
+  images.forEach(({bytes,width,height},i)=>{
+    const pid=3+i*3,cid=pid+1,iid=pid+2;
+    obj(pid,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /XObject << /Im${i} ${iid} 0 R >> >> /Contents ${cid} 0 R >>`);
+    const drawing=`q\n842 0 0 595 0 0 cm\n/Im${i} Do\nQ\n`;
+    obj(cid,`<< /Length ${encoder.encode(drawing).length} >>\nstream\n${drawing}endstream`);
+    offsets[iid]=size;append(`${iid} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.byteLength} >>\nstream\n`);
+    append(bytes);append('\nendstream\nendobj\n');
+  });
+  const xref=size,maxObj=2+images.length*3;
+  append(`xref\n0 ${maxObj+1}\n0000000000 65535 f \n`);
+  for(let i=1;i<=maxObj;i++)append(`${String(offsets[i]).padStart(10,'0')} 00000 n \n`);
+  append(`trailer\n<< /Size ${maxObj+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(parts,{type:'application/pdf'});
+}
+function ledgerOfferDownloads(files){
+  for(const url of ledgerDownloadUrls)URL.revokeObjectURL(url);
+  ledgerDownloadUrls=[];
+  const target=$('#ledgerExportResult');target.replaceChildren();
+  const caption=document.createElement('p');caption.className='ledger-export-message';
+  caption.textContent='ファイルを作成しました。下のリンクから保存してください。iPhoneではリンクを開き、共有 →「ファイルに保存」を選択できます。';
+  target.appendChild(caption);
+  const links=document.createElement('div');links.className='ledger-download-links';target.appendChild(links);
+  const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  for(const file of files){
+    const url=URL.createObjectURL(file.blob);ledgerDownloadUrls.push(url);
+    const a=document.createElement('a');a.className='btn btn-outline ledger-file-link';a.href=url;a.download=file.filename;a.target='_blank';a.rel='noopener';
+    a.textContent=`↓ ${file.filename} を開く・保存`;links.appendChild(a);
+    if(!ios&&files.length===1){a.click();}
+  }
+  toast('ファイルを作成しました。保存用リンクをご利用ください。');
+}
+async function ledgerExport(type){
+  const btn=$(`#ledger${type==='pdf'?'Pdf':type==='png'?'Png':'Jpeg'}`),before=btn.textContent;
+  btn.disabled=true;btn.textContent='生成中…';
+  try{
+    const pages=ledgerExportPages(),ext=type==='jpeg'?'jpg':type;
+    const stem=`支出の余白_家計簿_${ledgerDates()[0]}_${ledgerMode}`;
+    if(type==='pdf'){
+      const images=[];
+      for(const page of pages){
+        const canvas=ledgerCanvas(),ctx=canvas.getContext('2d');if(!ctx)throw Error('PDF生成に対応していません。');
+        ledgerDrawPage(ctx,page,0);
+        const jpeg=await ledgerCanvasBlob(canvas,'image/jpeg',.9);
+        images.push({bytes:new Uint8Array(await jpeg.arrayBuffer()),width:canvas.width,height:canvas.height});
+        canvas.width=1;canvas.height=1;
+      }
+      ledgerOfferDownloads([{filename:`${stem}.pdf`,blob:ledgerPdfBlob(images)}]);
+    }else{
+      const mime=type==='png'?'image/png':'image/jpeg',files=[];
+      // 5ページまでは画像1枚に連結。多い場合はiPhoneのメモリ不足防止のためページごとに保存。
+      if(pages.length<=5){
+        const canvas=document.createElement('canvas');canvas.width=LEDGER_CANVAS_WIDTH;canvas.height=LEDGER_CANVAS_HEIGHT*pages.length;
+        const ctx=canvas.getContext('2d');if(!ctx)throw Error('画像の生成に対応していません。');
+        pages.forEach((page,i)=>ledgerDrawPage(ctx,page,i*LEDGER_CANVAS_HEIGHT));
+        files.push({filename:`${stem}.${ext}`,blob:await ledgerCanvasBlob(canvas,mime,.9)});
+        canvas.width=1;canvas.height=1;
+      }else{
+        for(let i=0;i<pages.length;i++){
+          const canvas=ledgerCanvas(),ctx=canvas.getContext('2d');if(!ctx)throw Error('画像の生成に対応していません。');
+          ledgerDrawPage(ctx,pages[i],0);
+          files.push({filename:`${stem}_${String(i+1).padStart(2,'0')}.${ext}`,blob:await ledgerCanvasBlob(canvas,mime,.9)});
+          canvas.width=1;canvas.height=1;
+        }
+      }
+      ledgerOfferDownloads(files);
+    }
+  }catch(e){console.error('家計簿の出力失敗',e);toast(e.message||'書き出しに失敗しました。',true);}
+  finally{btn.disabled=false;btn.textContent=before;}
+}
+$('#ledgerPdf').addEventListener('click',()=>{void ledgerExport('pdf');});
+$('#ledgerPng').addEventListener('click',()=>{void ledgerExport('png');});
+$('#ledgerJpeg').addEventListener('click',()=>{void ledgerExport('jpeg');});
 
 /* CSVと暗号化バックアップ */
 function downloadFile(filename,data,mime){const blob=new Blob([data],{type:mime});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);}
