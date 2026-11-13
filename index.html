@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
   <title>支出の余白｜暮らしを見直す支出記録</title>
 </head>
 <body>
@@ -44,6 +44,7 @@
       <button class="tab active" data-tab="record" type="button"><span class="tab-icon">✎</span><span>記録</span></button>
       <button class="tab" data-tab="home" type="button"><span class="tab-icon">▤</span><span>ホーム</span></button>
       <button class="tab" data-tab="calendar" type="button"><span class="tab-icon">▦</span><span>カレンダー</span></button>
+      <button class="tab" data-tab="ledger" type="button"><span class="tab-icon">▦</span><span>家計簿</span></button>
       <button class="tab" data-tab="analysis" type="button"><span class="tab-icon">◉</span><span>分析</span></button>
       <button class="tab" data-tab="settings" type="button"><span class="tab-icon">⚙</span><span>設定</span></button>
     </nav>
@@ -97,6 +98,23 @@
         <div class="month-picker" data-month-control="calendar"><button class="month-arrow" type="button" data-month-delta="-1" aria-label="前の月">‹</button><strong id="calendarMonthTitle"></strong><button class="month-arrow" type="button" data-month-delta="1" aria-label="次の月">›</button></div>
         <div class="card calendar-card"><div class="calendar-weekdays"><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="saturday">土</span><span class="sunday">日</span></div><div id="calendarGrid" class="calendar-grid"></div><div class="calendar-legend"><span><i class="dot dot-ordinary"></i>記録あり</span><span><i class="dot dot-unexpected"></i>予定外の支出あり</span></div></div>
         <div class="card padded daily-detail"><div class="section-title-row"><h3 id="selectedDayTitle">選択した日の支出</h3><strong id="selectedDayTotal"></strong></div><div id="dayCategories"></div><div id="dayRecords" class="day-record-list"></div></div>
+      </section>
+
+      <section id="page-ledger" class="page" aria-label="家計簿形式の支出一覧">
+        <div class="page-heading"><div><span class="eyebrow">SPENDING LEDGER</span><h2>支出の家計簿</h2><p class="muted">日付ごとの明細を、罫線入りの表で見渡す。</p></div></div>
+        <div class="card padded ledger-controls">
+          <div class="ledger-range-bar" role="group" aria-label="家計簿の表示期間">
+            <button class="ledger-mode selected" type="button" data-ledger-mode="three">3日</button>
+            <button class="ledger-mode" type="button" data-ledger-mode="week">週表示</button>
+            <button class="ledger-mode" type="button" data-ledger-mode="month">月表示</button>
+          </div>
+          <div class="ledger-period-bar"><button type="button" class="month-arrow" id="ledgerPrev" aria-label="前の期間">‹</button><strong id="ledgerPeriod"></strong><button type="button" class="month-arrow" id="ledgerNext" aria-label="次の期間">›</button><button class="btn btn-outline ledger-today" type="button" id="ledgerToday">今日へ</button></div>
+          <p class="muted tiny ledger-help">表の内側を上下左右にスクロールできます。予定外の支出は赤字で表示します。</p>
+          <div class="ledger-export-actions"><button type="button" class="btn btn-primary" id="ledgerPdf">↓ PDF印刷・保存（A4横）</button><button type="button" class="btn btn-secondary" id="ledgerPng">↓ PNG</button><button type="button" class="btn btn-outline" id="ledgerJpeg">↓ JPEG</button></div>
+          <p class="muted tiny">PDFは端末の印刷画面から「PDFとして保存」を選択してください。出力は7日ごとに区切られ、月表示は複数ページになります。画像も7日ごとのページを縦に連結して保存します。</p>
+        </div>
+        <div class="ledger-scroll" id="ledgerScroll" tabindex="0" aria-label="支出家計簿。上下左右にスクロール可能"><table class="ledger-table" id="ledgerTable"></table></div>
+        <div class="ledger-outside-total" id="ledgerTotal"></div>
       </section>
 
       <section id="page-analysis" class="page" aria-label="支出の分析">
@@ -178,6 +196,6 @@
     </div>
   </div>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <script src="app.js?v=9" defer></script>
+  <script src="app.js?v=10" defer></script>
 </body>
 </html>
