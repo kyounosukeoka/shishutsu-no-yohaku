@@ -194,3 +194,28 @@ button,.tab,.calc-key,.category-choice,.rating-btn,.segment{touch-action:manipul
 .ledger-file-link{display:block;text-align:center;overflow-wrap:anywhere;text-decoration:none}
 .ledger-file-link:focus-visible{outline:3px solid #2b8765;outline-offset:3px}
 @media(max-width:640px){.ledger-table .ledger-index{min-width:136px!important;width:136px!important;max-width:136px}.ledger-table .ledger-item-label{padding:8px 5px}.ledger-item-memo{font-size:11px}.ledger-table .ledger-entry strong{font-size:13px}}
+
+/* Ver.12: カテゴリーを縦方向に結合し、使い道＋金額は日付セル内に表示 */
+.ledger-table .ledger-index{min-width:142px!important;width:142px!important;max-width:142px}
+.ledger-table .ledger-group-label{padding:11px 9px;vertical-align:middle!important;background:#edf4ed;line-height:1.55}
+.ledger-table .ledger-group-label .ledger-entry-cat{font-size:12px;display:flex;align-items:center;gap:5px;white-space:normal;overflow-wrap:anywhere}
+.ledger-table .ledger-group-count{display:block;margin-top:8px;color:#6e806f;font-size:11px;font-weight:500}
+.ledger-table .ledger-entry{padding:8px 9px;vertical-align:top;text-align:left}
+.ledger-table .ledger-entry-memo{margin:0 0 7px;font-size:12px;color:#344d3f;white-space:normal;overflow-wrap:anywhere;line-height:1.4;max-width:230px}
+.ledger-table .ledger-entry strong{text-align:right;display:block;font-size:15px;white-space:nowrap}
+.ledger-table .ledger-category-total{font-size:15px;vertical-align:middle;text-align:right;background:#eef5ec}
+.ledger-table tr.ledger-item-row>td:not(.ledger-empty):not(.ledger-total-col){background:#fff}
+.ledger-table tr.ledger-item-row>td.ledger-unexpected{background:#fff1ee;color:#a53232}
+.ledger-table tr.ledger-item-row>td.ledger-unexpected .ledger-entry-memo{color:#a53232}
+.ledger-table tr.ledger-item-row>td.ledger-empty{text-align:center;vertical-align:middle}
+.ledger-table tr.ledger-category-start>td,.ledger-table tr.ledger-category-start>th{border-top:3px solid #658b71}
+.ledger-table tr.ledger-item-row:not(.ledger-category-start)>td.ledger-entry,
+.ledger-table tr.ledger-item-row:not(.ledger-category-start)>td.ledger-empty{border-top:1px solid #d5dfd6}
+@media(max-width:640px){
+  .ledger-table .ledger-index{min-width:108px!important;width:108px!important;max-width:108px}
+  .ledger-table .ledger-group-label{padding:9px 5px}
+  .ledger-table .ledger-group-label .ledger-entry-cat{font-size:11px}
+  .ledger-table .ledger-entry{padding:8px 6px}
+  .ledger-table .ledger-entry-memo{font-size:12px}
+  .ledger-table .ledger-category-total{min-width:105px;width:105px;font-size:13px}
+}

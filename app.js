@@ -19,7 +19,7 @@ const CATEGORIES=[
 const EXTRA_COLORS=['#8aa7b8','#b39ebd','#d4a381','#8fb69e','#bfa774','#c79eaa','#97a8c3','#b7b68d'];
 const COLOR_PALETTE=['#72a58c','#2e695c','#a2bf94','#8c9bbe','#4c80a7','#94b1bb','#9e98c1','#7665a7','#c78ea4','#d76883','#b74847','#ca946e','#d1b35c','#c6a051','#a9987b','#b5a17c','#939c9b','#4d6868','#343e4b','#8fb69e','#f3b59b','#ddabcf','#b7b68d','#e2cdb1'];
 const normalizeColor=(color)=>/^#[0-9a-f]{6}$/i.test(String(color||''))?String(color).toLowerCase():'#939c9b';
-const APP_VERSION='11.0.0';
+const APP_VERSION='12.0.0';
 const AUTO_UNLOCK_FLAG='shishutsu-no-yohaku-auto-unlock-v1';
 const KEY_DB='shishutsu-no-yohaku-device-key-v1';
 /* カテゴリー登録用：端末に標準搭載された絵文字から選択 */
@@ -385,7 +385,9 @@ $$('[data-close]').forEach(el=>el.addEventListener('click',()=>{if(el.dataset.cl
 $('#recurringForm').addEventListener('submit',(e)=>{e.preventDefault();const name=$('#recurringName').value.trim(),amount=Number($('#recurringAmount').value),category=$('#recurringCategory').value,frequency=$('#recurringFrequency').value,startDate=$('#recurringStart').value,planned=$('#recurringPlan').value,rating=Number($('#recurringRating').value);if(!name||!Number.isSafeInteger(amount)||amount<1||amount>999999999||!state.categories.some(c=>c.id===category)||!validDate(startDate)||!['weekly','monthly','yearly'].includes(frequency)){toast('定期支出の入力内容を確認してください。',true);return;}state.recurrings.push({id:safeId(),name,amount,category,frequency,startDate,planned,rating,nextIndex:0});const count=generateRecurring();queueSave();modal('recurring',false);renderAll();toast(`定期支出を登録しました。${count?'初回の支出も記録しました。':''}`);});
 $('#recurringList').addEventListener('click',(e)=>{const b=e.target.closest('[data-delete-recurring]');if(!b)return;if(!confirm('この定期支出の今後の自動登録を停止しますか？\n※すでに登録済みの支出は残ります。'))return;state.recurrings=state.recurrings.filter(r=>r.id!==b.dataset.deleteRecurring);queueSave();renderSettings();toast('定期支出の自動登録を停止しました。');});
 
-/* 家計簿：カテゴリー順＋同じ使い道を横並びに統合。暗号化記録自体は変更しない。 */
+/* 家計簿：左列はカテゴリー、日付の各セルには使い道＋金額。
+   同一カテゴリーは日ごとの最大明細数ぶんだけ行を増やす。
+   保存済み支出の中身や暗号化形式は変更しない。 */
 const LEDGER_WEEKDAYS=['日','月','火','水','木','金','土'];
 const LEDGER_CANVAS_WIDTH=1500,LEDGER_CANVAS_HEIGHT=1060,LEDGER_ROWS_PER_PAGE=11;
 let ledgerDownloadUrls=[];
@@ -398,58 +400,61 @@ function ledgerDates(){
 }
 function ledgerHeaderDate(d){return `${Number(d.slice(5,7))}/${Number(d.slice(8,10))}（${LEDGER_WEEKDAYS[parseISO(d).getUTCDay()]}）`;}
 function ledgerItemName(r){return String(r.memo||'').trim().replace(/\s+/g,' ')||'使い道未入力';}
-/* 同一カテゴリー＋同一メモを一行にまとめる。なお同じ日に重複した場合は
-   各支出が失われないよう２行目以降へ分け、別日の同一項目と対応させる。 */
 function ledgerBuild(dates){
   const dateSet=new Set(dates),ordered=new Map(state.categories.map((c,i)=>[c.id,i]));
   const recs=state.records.filter(r=>dateSet.has(r.date)).sort((a,b)=>
     a.date.localeCompare(b.date)||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||String(a.id||'').localeCompare(String(b.id||'')));
-  const categories=new Map(),totals=new Map(dates.map(d=>[d,0]));
+  const byCategory=new Map(),totals=new Map(dates.map(d=>[d,0]));
   for(const r of recs){
     totals.set(r.date,totals.get(r.date)+Number(r.amount||0));
-    if(!categories.has(r.category))categories.set(r.category,new Map());
-    const items=categories.get(r.category),label=ledgerItemName(r);
-    if(!items.has(label))items.set(label,new Map());
-    const grouped=items.get(label);
-    if(!grouped.has(r.date))grouped.set(r.date,[]);
-    grouped.get(r.date).push(r);
+    if(!byCategory.has(r.category))byCategory.set(r.category,new Map());
+    const dayMap=byCategory.get(r.category);
+    if(!dayMap.has(r.date))dayMap.set(r.date,[]);
+    dayMap.get(r.date).push(r);
   }
-  const rows=[];
-  const keys=[...categories.keys()].sort((a,b)=>(ordered.get(a)??999)-(ordered.get(b)??999)||String(a).localeCompare(String(b)));
+  const groups=[],rows=[];
+  const keys=[...byCategory.keys()].sort((a,b)=>(ordered.get(a)??999)-(ordered.get(b)??999)||String(a).localeCompare(String(b)));
   for(const id of keys){
-    for(const [label,byDate] of categories.get(id)){
-      const count=Math.max(1,...[...byDate.values()].map(items=>items.length));
-      for(let i=0;i<count;i++){
-        const values=new Map();
-        for(const d of dates){const record=byDate.get(d)?.[i];if(record)values.set(d,record);}
-        rows.push({categoryId:id,category:categoryById(id),label,ordinal:i+1,byDate:values,total:sum([...values.values()])});
-      }
+    const days=byCategory.get(id),category=categoryById(id);
+    // 同じ使い道名であるかどうかには関係なく、日付ごとに順に1～N件目を置く。
+    const rowCount=Math.max(1,...[...days.values()].map(items=>items.length));
+    const total=[...days.values()].reduce((t,items)=>t+sum(items),0);
+    const group={categoryId:id,category,total,rowCount,rows:[]};
+    for(let i=0;i<rowCount;i++){
+      const values=new Map();
+      for(const d of dates){const r=days.get(d)?.[i];if(r)values.set(d,r);}
+      const row={categoryId:id,category,categoryTotal:total,groupIndex:i,groupSize:rowCount,byDate:values};
+      rows.push(row);group.rows.push(row);
     }
+    groups.push(group);
   }
-  return {dates,rows,totals,grandTotal:sum(recs),recordCount:recs.length};
+  return {dates,groups,rows,totals,grandTotal:sum(recs),recordCount:recs.length};
 }
 function ledgerCategoryStart(rows,i){return i===0||rows[i].categoryId!==rows[i-1].categoryId;}
-function ledgerRowLabel(row){return row.ordinal>1?`${row.label}（${row.ordinal}件目）`:row.label;}
 function renderLedger(){
   const dates=ledgerDates(),ledger=ledgerBuild(dates);
   $$('.ledger-mode').forEach(b=>{const selected=b.dataset.ledgerMode===ledgerMode;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});
   $('#ledgerPeriod').textContent=`${dates[0]} ～ ${dates[dates.length-1]}`;
-  let out='<thead><tr><th scope="col" class="ledger-index">カテゴリー・使い道</th>'+dates.map(d=>`<th scope="col" class="ledger-date ${d===today()?'ledger-current':''}">${escapeHTML(ledgerHeaderDate(d))}${d===today()?'<small>本日</small>':''}</th>`).join('')+'<th scope="col" class="ledger-total-col">行の合計</th></tr></thead><tbody>';
+  let out='<thead><tr><th scope="col" class="ledger-index">カテゴリー</th>'+dates.map(d=>`<th scope="col" class="ledger-date ${d===today()?'ledger-current':''}">${escapeHTML(ledgerHeaderDate(d))}${d===today()?'<small>本日</small>':''}</th>`).join('')+'<th scope="col" class="ledger-total-col">カテゴリー合計</th></tr></thead><tbody>';
   if(!ledger.rows.length){
     out+='<tr><th class="ledger-index">記録なし</th>'+dates.map(()=>'<td class="ledger-empty">—</td>').join('')+'<td class="ledger-total-col">—</td></tr>';
   }
-  ledger.rows.forEach((row,i)=>{
-    const start=ledgerCategoryStart(ledger.rows,i),groupClass=start?' ledger-category-start':'';
-    out+=`<tr class="ledger-item-row${groupClass}"><th scope="row" class="ledger-index ledger-item-label"><span class="ledger-entry-cat"><span class="ledger-cat-dot" style="background:${normalizeColor(row.category.color)}"></span>${escapeHTML(row.category.icon)} ${escapeHTML(row.category.name)}</span><span class="ledger-item-memo">${escapeHTML(ledgerRowLabel(row))}</span></th>`;
-    for(const d of dates){
-      const r=row.byDate.get(d);
-      out+=r?`<td class="ledger-entry ${r.planned==='unexpected'?'ledger-unexpected':''}"><strong>${yen(r.amount)}</strong>${r.planned==='unexpected'?'<small>予定外</small>':''}</td>`:'<td class="ledger-empty">—</td>';
-    }
-    out+=`<td class="ledger-total-col">${yen(row.total)}</td></tr>`;
-  });
+  for(const group of ledger.groups){
+    group.rows.forEach((row,i)=>{
+      const first=i===0;
+      out+=`<tr class="ledger-item-row${first?' ledger-category-start':''}">`;
+      if(first)out+=`<th scope="rowgroup" rowspan="${group.rowCount}" class="ledger-index ledger-group-label"><span class="ledger-entry-cat"><span class="ledger-cat-dot" style="background:${normalizeColor(group.category.color)}"></span>${escapeHTML(group.category.icon)} ${escapeHTML(group.category.name)}</span><small class="ledger-group-count">${group.rows.reduce((n,r)=>n+r.byDate.size,0)}件</small></th>`;
+      for(const d of dates){
+        const r=row.byDate.get(d);
+        out+=r?`<td class="ledger-entry ${r.planned==='unexpected'?'ledger-unexpected':''}"><span class="ledger-entry-memo">${escapeHTML(ledgerItemName(r))}</span><strong>${yen(r.amount)}</strong>${r.planned==='unexpected'?'<small>予定外</small>':''}</td>`:'<td class="ledger-empty">—</td>';
+      }
+      if(first)out+=`<td rowspan="${group.rowCount}" class="ledger-total-col ledger-category-total">${yen(group.total)}</td>`;
+      out+='</tr>';
+    });
+  }
   out+='<tr class="ledger-sum"><th class="ledger-index">日別合計</th>'+dates.map(d=>`<td>${yen(ledger.totals.get(d))}</td>`).join('')+`<td class="ledger-total-col">${yen(ledger.grandTotal)}</td></tr></tbody>`;
   $('#ledgerTable').innerHTML=out;
-  $('#ledgerTotal').textContent=`表示期間の支出合計：${yen(ledger.grandTotal)}（${ledger.recordCount}件／${ledger.rows.length}項目行）`;
+  $('#ledgerTotal').textContent=`表示期間の支出合計：${yen(ledger.grandTotal)}（${ledger.recordCount}件／${ledger.groups.length}カテゴリー）`;
   const scroller=$('#ledgerScroll');
   if(ledgerMode==='month'){
     requestAnimationFrame(()=>{const now=dates.indexOf(today());if(now>=0){const cell=$$('#ledgerTable thead .ledger-date')[now];if(cell)scroller.scrollLeft=Math.max(0,cell.offsetLeft-scroller.clientWidth/3);}else scroller.scrollLeft=0;});
@@ -475,52 +480,73 @@ function ledgerExportPages(){
 }
 /* A4横と同じ比率の画像を、PDF/PNG/JPEGのすべてで共通利用する。 */
 function ledgerDrawPage(ctx,page,top,W=LEDGER_CANVAS_WIDTH,H=LEDGER_CANVAS_HEIGHT){
-  const ink='#263d34',grid='#9aaea1',soft='#ebf2ec',heavy='#5a7463';
+  const ink='#263d34',grid='#a3b3a6',soft='#ebf2ec',heavy='#5a7463';
   const drawText=(v,x,y,size=18,bold=false,color=ink,align='left',width=280)=>{
     ctx.fillStyle=color;ctx.font=`${bold?'700 ':'400 '}${size}px -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif`;
     ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillText(String(v),x,y,width);
   };
   const line=(x,y,x2,y2,width=1,color=grid)=>{ctx.beginPath();ctx.lineWidth=width;ctx.strokeStyle=color;ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke();};
   const rect=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
+  // 細かい文字は幅に合わせて切り詰め、極端に横縮みさせない。
+  const wrapMemo=(value,maxWidth)=>{
+    ctx.font='14px -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+    const chars=[...String(value)],parts=[],limit=2;let s='';
+    for(let i=0;i<chars.length;i++){
+      if(ctx.measureText(s+chars[i]).width>maxWidth&&s){parts.push(s);s='';}
+      s+=chars[i];
+      if(parts.length>=limit){parts[limit-1]=parts[limit-1].slice(0,-1)+'…';return parts;}
+    }
+    if(s)parts.push(s);
+    return parts.slice(0,limit);
+  };
   rect(0,top,W,H,'#fff');
   drawText('支出の余白　｜　家計簿',46,top+47,30,true);
-  drawText(`${page.dates[0]} ～ ${page.dates[page.dates.length-1]}　　7日以内の合計 ${yen(page.rangeTotal)}`,W-45,top+49,18,true,ink,'right',870);
-  drawText(`カテゴリーの表示順 ／ 同じ使い道は同じ行 ／ ${page.part}/${page.totalParts}頁${page.totalParts>1?'（この日付範囲）':''}`,46,top+81,15,false,'#5b7365','left',1200);
+  drawText(`${page.dates[0]} ～ ${page.dates[page.dates.length-1]}　　期間合計 ${yen(page.rangeTotal)}`,W-45,top+49,18,true,ink,'right',870);
+  drawText(`カテゴリー別に集約 ／ 日付のセルに使い道と金額 ／ ${page.part}/${page.totalParts}頁${page.totalParts>1?'（この日付範囲）':''}`,46,top+81,15,false,'#5b7365','left',1300);
   const l=40,r=W-40,t=top+113,b=top+H-39,headerH=61,footerH=60;
-  const labelW=246,totalW=124,dayW=(r-l-labelW-totalW)/page.dates.length;
+  const labelW=215,totalW=122,dayW=(r-l-labelW-totalW)/page.dates.length;
   const cols=[l,l+labelW];for(let i=1;i<=page.dates.length;i++)cols.push(l+labelW+i*dayW);cols.push(r);
-  const rows=page.rows.length?page.rows:[{categoryId:'',category:{name:'',icon:'',color:'#fff'},label:'記録なし',ordinal:1,byDate:new Map(),total:0}];
+  const rows=page.rows.length?page.rows:[{categoryId:'',category:{name:'',icon:'',color:'#fff'},byDate:new Map(),categoryTotal:0,groupIndex:0,groupSize:1}];
   const bodyH=b-t-headerH-footerH,rowH=bodyH/Math.max(1,LEDGER_ROWS_PER_PAGE);
   rect(l,t,r-l,headerH,soft);
   rect(l,b-footerH,r-l,footerH,soft);
   for(let i=0;i<=rows.length;i++){
-    const y=t+headerH+i*rowH;if(i===rows.length&&rows.length<LEDGER_ROWS_PER_PAGE)continue;
-    const categoryChange=i<rows.length&&ledgerCategoryStart(rows,i);
-    line(l,y,r,y,categoryChange?3:1,categoryChange?heavy:grid);
+    const y=t+headerH+i*rowH;
+    const categoryChange=i===rows.length||ledgerCategoryStart(rows,i);
+    line(categoryChange?l:l+labelW,y,categoryChange?r:r-totalW,y,categoryChange?3:1,categoryChange?heavy:grid);
   }
   line(l,t,r,t,1.3,heavy);line(l,b,r,b,1.3,heavy);
   line(l,b-footerH,r,b-footerH,2,heavy);
   for(const x of cols)line(x,t,x,b,1,grid);
-  drawText('カテゴリー・使い道',l+10,t+headerH/2,19,true,ink,'left',labelW-14);
+  drawText('カテゴリー',l+labelW/2,t+headerH/2,20,true,ink,'center',labelW-14);
   page.dates.forEach((d,i)=>drawText(ledgerHeaderDate(d),l+labelW+(i+.5)*dayW,t+headerH/2,19,true,ink,'center',dayW-8));
-  drawText('行の合計',r-totalW/2,t+headerH/2,19,true,ink,'center',totalW-9);
+  drawText('カテゴリ計',r-totalW/2,t+headerH/2,17,true,ink,'center',totalW-9);
   const pageDayTotals=new Map(page.dates.map(d=>[d,0]));
   rows.forEach((row,i)=>{
     const y=t+headerH+i*rowH;
-    if(row.categoryId){
-      rect(l+9,y+16,7,7,normalizeColor(row.category.color));
-      drawText(`${row.category.icon} ${row.category.name}`,l+22,y+24,16,true,ink,'left',labelW-29);
-      drawText(ledgerRowLabel(row),l+13,y+rowH*.68,16,false,ink,'left',labelW-22);
-    }else drawText('記録なし',l+14,y+rowH/2,16,false);
     page.dates.forEach((d,di)=>{
       const r0=row.byDate.get(d);if(!r0)return;
       pageDayTotals.set(d,pageDayTotals.get(d)+Number(r0.amount||0));
-      const center=l+labelW+(di+.5)*dayW;
-      drawText(yen(r0.amount),center,y+rowH*.49,20,true,r0.planned==='unexpected'?'#b13d3b':ink,'center',dayW-12);
-      if(r0.planned==='unexpected')drawText('予定外',center,y+rowH*.78,12,false,'#b13d3b','center',dayW-12);
+      const cellX=l+labelW+di*dayW,center=cellX+dayW/2;
+      const memoLines=wrapMemo(ledgerItemName(r0),dayW-14);
+      memoLines.forEach((tx,k)=>drawText(tx,cellX+7,y+15+k*16,14,false,ink,'left',dayW-14));
+      if(r0.planned==='unexpected')drawText('予定外',cellX+8,y+rowH-13,11,true,'#b13d3b','left',dayW-15);
+      drawText(yen(r0.amount),cellX+dayW-8,y+rowH-14,18,true,r0.planned==='unexpected'?'#b13d3b':ink,'right',dayW-15);
     });
-    drawText(row.total?yen(row.total):'—',r-9,y+rowH*.49,19,true,ink,'right',totalW-14);
   });
+  // カテゴリー列・右端合計列は、同一カテゴリーの連続行を1つの結合セルのように描画する。
+  for(let i=0;i<rows.length;){
+    const row=rows[i],first=i,categoryId=row.categoryId;
+    while(i<rows.length&&rows[i].categoryId===categoryId)i++;
+    const count=i-first,mid=t+headerH+first*rowH+count*rowH/2;
+    if(!categoryId){drawText('記録なし',l+13,mid,16);continue;}
+    const continued=first===0&&row.groupIndex>0;
+    const categoryLabel=`${row.category.icon} ${row.category.name}${continued?'（続）':''}`;
+    rect(l+8,mid-23,5,46,normalizeColor(row.category.color));
+    drawText(categoryLabel,l+20,mid-7,17,true,ink,'left',labelW-27);
+    drawText(`${row.groupSize}行`,l+20,mid+19,13,false,'#526f5c','left',labelW-27);
+    drawText(yen(row.categoryTotal),r-9,mid,18,true,ink,'right',totalW-15);
+  }
   const footY=b-footerH/2;
   drawText('日別合計',l+labelW/2,footY,19,true,ink,'center',labelW-10);
   page.dates.forEach((d,i)=>drawText(yen(pageDayTotals.get(d)),l+labelW+(i+.5)*dayW,footY,18,true,ink,'center',dayW-12));
